@@ -178,11 +178,15 @@ class PhoneticHelper:
     def clean_name(cls, raw: str) -> str:
         if not raw:
             return ""
-        text = re.sub(r'\(.*?\)', '', raw)
-        text = re.sub(r'\[.*?\]', '', text)
+        # Strip bracketed IDs first [5N69], then parentheses
+        text = re.sub(r'\[.*?\]', '', raw)
+        text = re.sub(r'\(.*?\)', '', text)
         text = re.sub(r'\b(DDG-\d+|CG-\d+|SSN-\d+|SSK-\d+|FFG-\d+|CVN-\d+|USS|HMS)\b', '', text, flags=re.IGNORECASE)
         text = text.replace('#', ' ').replace('-', ' ').replace('_', ' ')
-        return re.sub(r'\s+', ' ', text).strip()
+        cleaned = re.sub(r'\s+', ' ', text).strip()
+        if cleaned in (")", "(", "#", "-", "/", "No cargo"):
+            return ""
+        return cleaned
 
     @classmethod
     def clean_base(cls, raw: str) -> str:
@@ -286,6 +290,7 @@ class CmoTacticalVoiceAdvisor:
         self.departure_buffer: Dict[str, List[Dict[str, Any]]] = {}
         self.departure_lock = threading.Lock()
         self.departure_timer: Optional[threading.Timer] = None
+        self.recent_flight_ops: Dict[str, float] = {}
 
     def notify_departure(self, unit_raw: str, base_raw: str):
         """Batches multi-ship takeoffs within 1.8s into a single military radio announcement."""
@@ -317,7 +322,7 @@ class CmoTacticalVoiceAdvisor:
             is_carrier = any(c in base_name.lower() for c in ["carrier", "portaaviones", "cvn", "cv", "lha", "lhd"])
 
             if self.lang == "es":
-                caller = "Operaciones de cubierta" if is_carrier else "Control de vuelo"
+                caller = "Control de vuelo"
                 if len(items) == 1:
                     u = items[0]["clean"]
                     disp = f"VUELO: {u} en el aire desde {base_name}."
@@ -332,7 +337,7 @@ class CmoTacticalVoiceAdvisor:
                     disp = f"LANZAMIENTO EN PAQUETE: {count}x {u_type} en el aire desde {base_name}."
                     speech = f"{caller}: Paquete de {count} {u_type} en el aire desde {base_name}."
             else:
-                caller = "Flight deck ops" if is_carrier else "Flight operations"
+                caller = "Flight operations"
                 if len(items) == 1:
                     u = items[0]["clean"]
                     disp = f"FLIGHT OPS: {u} airborne from {base_name}."
@@ -513,6 +518,29 @@ def detect_player_side(log_path: str) -> Optional[str]:
     return last_side
 
 
+US_SIDE_ALIASES = {
+    "USN", "US NAVY", "U.S. NAVY", "UNITED STATES NAVY",
+    "USAF", "US AIR FORCE", "U.S. AIR FORCE", "UNITED STATES AIR FORCE",
+    "USA", "U.S.A.", "U.S.", "US", "UNITED STATES", "UNITED STATES OF AMERICA",
+    "USMC", "US MARINE CORPS", "U.S. MARINES", "US MARINES",
+    "BLUE", "NATO", "ALLIES", "ISRAEL", "IDF"
+}
+
+def is_player_side(line_side: Optional[str], player_side: Optional[str]) -> bool:
+    """Verifies if an event's side belongs to the player or allied forces."""
+    if not line_side or not player_side:
+        return True
+    ls = line_side.strip().upper()
+    ps = player_side.strip().upper()
+    if ls == ps:
+        return True
+    if ls in US_SIDE_ALIASES and ps in US_SIDE_ALIASES:
+        return True
+    if ls in ps or ps in ls:
+        return True
+    return False
+
+
 def run_tactical_voice(lang: str = "es", side_override: str = ""):
     mutex = acquire_single_instance_lock()
     if not mutex:
@@ -604,14 +632,17 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
             print(f"🎖️ Bando detectado: {advisor.player_side}")
 
     # Regex definitions
+    re_side_switch = re.compile(r"Switched side to:\s*([^:\n\r]+)", re.IGNORECASE)
+    re_line_side = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]\s*(.*)$")
+    re_timestamp_prefix = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
     re_vampire = re.compile(r"(?:VAMPIRE|Missile inbound).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
     re_torpedo = re.compile(r"Torpedo\s*(?:inbound|detected).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
     re_classified = re.compile(r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*([^:\n]+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?", re.IGNORECASE)
     re_hit = re.compile(r"Weapon:\s*([^:\n]+?)\s*(?:has impacted|has detonated near)\s*([^:\(\n]+)", re.IGNORECASE)
-    re_destroyed = re.compile(r"(?:Unit:\s*)?([A-Za-z0-9\-\s,#\(\)\'\"]+?)\s+has (?:been destroyed|sunk|run out of fuel and crashed)", re.IGNORECASE)
+    re_destroyed = re.compile(r"(?:Unit:\s*)?([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+has (?:been destroyed|sunk|run out of fuel and crashed)", re.IGNORECASE)
     re_bingo = re.compile(r"Unit:\s*([^:\n]+?)\s*is BINGO FUEL", re.IGNORECASE)
     re_departed = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+departed\s+([^.\n]+?)(?:\s+and\s+is\s+waiting\s+for\s+orders)?\.", re.IGNORECASE)
-    re_unit_ready = re.compile(r"([A-Za-z0-9\-\s,#\[\]]+?\([^)]+\))\s+is ready at\s+([^.\n\r]+)", re.IGNORECASE)
+    re_rtb = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+is returning to base\s*\(([^)]+)\)", re.IGNORECASE)
     re_sub_bda = re.compile(r"([A-Za-z0-9\-\s,#]+?)\s+reports BDA status change on contact:\s*([^:\-]+?)\s*-\s*([^\n\r]+)", re.IGNORECASE)
 
     print("\n🟢 Sistema activo. Despausa o avanza el tiempo en CMO (1x o Barra Espaciadora).")
@@ -640,59 +671,77 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         if not raw_s:
                             continue
 
-                        # Clean timestamp and side prefix before evaluating regexes
-                        line = re.sub(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*(?:\[.*?\])?\s*", "", raw_s).strip()
+                        # Detect side switch events
+                        m_sw = re_side_switch.search(raw_s)
+                        if m_sw:
+                            cand_side = m_sw.group(1).strip()
+                            if cand_side:
+                                advisor.player_side = cand_side
+                                print(f"🎖️ Bando de operaciones activo: {advisor.player_side}")
+                            continue
+
+                        # Parse side prefix [Side] if present
+                        m_side = re_line_side.match(raw_s)
+                        if m_side:
+                            line_side = m_side.group(1).strip()
+                            line = m_side.group(2).strip()
+                        else:
+                            line_side = None
+                            line = re_timestamp_prefix.sub("", raw_s).strip()
+
                         if not line:
                             continue
 
-                        # 1. Vampire / Missile Inbound
+                        # 1. Vampire / Missile Inbound (Only against player/allies!)
                         m_vamp = re_vampire.search(line)
                         if m_vamp:
-                            bearing = m_vamp.group(1)
-                            if lang == "es":
-                                b_msg = f" con marcación {bearing}" if bearing else ""
-                                sp = f"¡Alerta Vampire! ¡Misil antibuque entrante{b_msg}!"
-                                dp = f"ALERTA VAMPIRE: Misil entrante{b_msg}."
-                            else:
-                                b_msg = f" bearing {bearing}" if bearing else ""
-                                sp = f"Warning: Vampire! Missile inbound{b_msg}!"
-                                dp = f"VAMPIRE WARNING: Missile inbound{b_msg}."
+                            if is_player_side(line_side, advisor.player_side):
+                                bearing = m_vamp.group(1)
+                                if lang == "es":
+                                    b_msg = f" con marcación {bearing}" if bearing else ""
+                                    sp = f"¡Alerta Vampire! ¡Misil antibuque entrante{b_msg}!"
+                                    dp = f"ALERTA VAMPIRE: Misil entrante{b_msg}."
+                                else:
+                                    b_msg = f" bearing {bearing}" if bearing else ""
+                                    sp = f"Warning: Vampire! Missile inbound{b_msg}!"
+                                    dp = f"VAMPIRE WARNING: Missile inbound{b_msg}."
 
-                            advisor.alert_queue.put(VoiceAlert(
-                                priority=PRIORITY_CRITICAL,
-                                timestamp=time.time(),
-                                domain="CRITICAL",
-                                text_display=dp,
-                                text_speech=sp,
-                                ttl_seconds=14.0,
-                                interrupt_current=True,
-                                is_radio=True
-                            ))
+                                advisor.alert_queue.put(VoiceAlert(
+                                    priority=PRIORITY_CRITICAL,
+                                    timestamp=time.time(),
+                                    domain="CRITICAL",
+                                    text_display=dp,
+                                    text_speech=sp,
+                                    ttl_seconds=14.0,
+                                    interrupt_current=True,
+                                    is_radio=True
+                                ))
                             continue
 
-                        # 2. Torpedo Inbound
+                        # 2. Torpedo Inbound (Only against player/allies!)
                         m_torp = re_torpedo.search(line)
                         if m_torp:
-                            bearing = m_torp.group(1)
-                            if lang == "es":
-                                b_msg = f" por marcación {bearing}" if bearing else ""
-                                sp = f"¡Torpedo en el agua{b_msg}! ¡Maniobra evasiva inmediata!"
-                                dp = f"ALERTA TORPEDO: Torpedo en el agua{b_msg}."
-                            else:
-                                b_msg = f" bearing {bearing}" if bearing else ""
-                                sp = f"Warning: Torpedo in the water{b_msg}! Initiate evasive action!"
-                                dp = f"TORPEDO WARNING: Inbound torpedo{b_msg}."
+                            if is_player_side(line_side, advisor.player_side):
+                                bearing = m_torp.group(1)
+                                if lang == "es":
+                                    b_msg = f" por marcación {bearing}" if bearing else ""
+                                    sp = f"¡Torpedo en el agua{b_msg}! ¡Maniobra evasiva inmediata!"
+                                    dp = f"ALERTA TORPEDO: Torpedo en el agua{b_msg}."
+                                else:
+                                    b_msg = f" bearing {bearing}" if bearing else ""
+                                    sp = f"Warning: Torpedo in the water{b_msg}! Initiate evasive action!"
+                                    dp = f"TORPEDO WARNING: Inbound torpedo{b_msg}."
 
-                            advisor.alert_queue.put(VoiceAlert(
-                                priority=PRIORITY_CRITICAL,
-                                timestamp=time.time(),
-                                domain="CRITICAL",
-                                text_display=dp,
-                                text_speech=sp,
-                                ttl_seconds=14.0,
-                                interrupt_current=True,
-                                is_radio=True
-                            ))
+                                advisor.alert_queue.put(VoiceAlert(
+                                    priority=PRIORITY_CRITICAL,
+                                    timestamp=time.time(),
+                                    domain="CRITICAL",
+                                    text_display=dp,
+                                    text_speech=sp,
+                                    ttl_seconds=14.0,
+                                    interrupt_current=True,
+                                    is_radio=True
+                                ))
                             continue
 
                         # 3. Unit Destroyed / Sunk
@@ -700,26 +749,27 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         if m_dest:
                             raw_unit = m_dest.group(1).strip()
                             clean_target = PhoneticHelper.clean_name(raw_unit)
-                            is_sunk = "sunk" in line.lower()
-                            domain = "SUB" if is_sunk else "BDA"
+                            if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
+                                is_sunk = "sunk" in line.lower()
+                                domain = "SUB" if is_sunk else "BDA"
 
-                            if lang == "es":
-                                verb = "hundido" if is_sunk else "destruido"
-                                sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
-                                dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
-                            else:
-                                verb = "sunk" if is_sunk else "destroyed"
-                                sp = f"Splash confirmed! Target {clean_target} {verb}."
-                                dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
+                                if lang == "es":
+                                    verb = "hundido" if is_sunk else "destruido"
+                                    sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
+                                    dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
+                                else:
+                                    verb = "sunk" if is_sunk else "destroyed"
+                                    sp = f"Splash confirmed! Target {clean_target} {verb}."
+                                    dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
 
-                            advisor.alert_queue.put(VoiceAlert(
-                                priority=PRIORITY_HIGH,
-                                timestamp=time.time(),
-                                domain=domain,
-                                text_display=dp,
-                                text_speech=sp,
-                                ttl_seconds=15.0
-                            ))
+                                advisor.alert_queue.put(VoiceAlert(
+                                    priority=PRIORITY_HIGH,
+                                    timestamp=time.time(),
+                                    domain=domain,
+                                    text_display=dp,
+                                    text_speech=sp,
+                                    ttl_seconds=15.0
+                                ))
                             continue
 
                         # 4. Weapon Hit
@@ -803,32 +853,37 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             ))
                             continue
 
-                        # 7. Section Departed (Takeoff)
+                        # 7. Section Departed (Takeoff - Only player/allied units)
                         m_dep = re_departed.search(line)
                         if m_dep:
-                            advisor.notify_departure(unit_raw=m_dep.group(1).strip(), base_raw=m_dep.group(2).strip())
+                            if is_player_side(line_side, advisor.player_side):
+                                advisor.notify_departure(unit_raw=m_dep.group(1).strip(), base_raw=m_dep.group(2).strip())
                             continue
 
-                        # 8. Ready on Deck
-                        m_rdy = re_unit_ready.search(line)
-                        if m_rdy:
-                            u_name = PhoneticHelper.clean_name(m_rdy.group(1).strip())
-                            loc_name = PhoneticHelper.clean_name(m_rdy.group(2).strip())
-                            if lang == "es":
-                                sp = f"Cubierta de vuelo: {u_name} rearmado y listo en {loc_name}."
-                                dp = f"MANTENIMIENTO: {u_name} listo en cubierta ({loc_name})."
-                            else:
-                                sp = f"Flight deck: {u_name} rearmed and ready on deck at {loc_name}."
-                                dp = f"FLIGHT DECK: {u_name} ready on deck ({loc_name})."
+                        # 8. Return to Base (RTB - Only player/allied units)
+                        m_rtb = re_rtb.search(line)
+                        if m_rtb:
+                            if is_player_side(line_side, advisor.player_side):
+                                c_unit = PhoneticHelper.clean_unit_callsign(m_rtb.group(1).strip())
+                                c_base = PhoneticHelper.clean_base(m_rtb.group(2).strip())
+                                now = time.time()
+                                if (now - advisor.recent_flight_ops.get(c_unit, 0.0)) > 45.0:
+                                    advisor.recent_flight_ops[c_unit] = now
+                                    if lang == "es":
+                                        sp = f"Control de vuelo: {c_unit} regresando a {c_base}."
+                                        dp = f"REGRESO A BASE: {c_unit} regresa a {c_base}."
+                                    else:
+                                        sp = f"Flight operations: {c_unit} returning to {c_base}."
+                                        dp = f"RTB: {c_unit} returning to {c_base}."
 
-                            advisor.alert_queue.put(VoiceAlert(
-                                priority=PRIORITY_NORMAL,
-                                timestamp=time.time(),
-                                domain="AIR",
-                                text_display=dp,
-                                text_speech=sp,
-                                ttl_seconds=12.0
-                            ))
+                                    advisor.alert_queue.put(VoiceAlert(
+                                        priority=PRIORITY_NORMAL,
+                                        timestamp=now,
+                                        domain="AIR",
+                                        text_display=dp,
+                                        text_speech=sp,
+                                        ttl_seconds=12.0
+                                    ))
                             continue
 
                         # 9. Submarine Acoustic BDA
