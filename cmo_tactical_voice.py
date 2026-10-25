@@ -1090,6 +1090,9 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                 advisor.baseline_start_time = time.time()
                 advisor.baseline_contacts_count = 0
                 advisor.known_contacts.clear()
+                advisor.known_hostiles.clear()
+                advisor.friendly_units.clear()
+                advisor.recent_threats.clear()
 
             # Baseline absorption phase completion check
             if advisor.is_baseline_sync and (time.time() - advisor.baseline_start_time) > 4.5:
@@ -1132,6 +1135,10 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             cand_side = m_sw.group(1).strip()
                             if cand_side:
                                 advisor.player_side = cand_side
+                                advisor.known_contacts.clear()
+                                advisor.known_hostiles.clear()
+                                advisor.friendly_units.clear()
+                                advisor.recent_threats.clear()
                                 print(f"🎖️ Bando de operaciones activo: {advisor.player_side}")
                             continue
 
