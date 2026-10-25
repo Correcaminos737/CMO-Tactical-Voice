@@ -1168,6 +1168,46 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         if not line:
                             continue
 
+                        # 3. Unit Destroyed / Sunk
+                        if "damage report:" in line.lower():
+                            continue
+
+                        m_dest = re_destroyed.search(line)
+                        if m_dest:
+                            raw_unit = m_dest.group(1).strip()
+                            clean_target = PhoneticHelper.clean_name(raw_unit)
+
+                            # Skip internal components (engines, mounts, antennas, radios, TTs)
+                            c_up = clean_target.upper()
+                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST")):
+                                continue
+                            if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
+                                is_sunk = "sunk" in line.lower()
+                                # Si la unidad pertenecia al bando del jugador o aliado -> BAJA ALIADA
+                                if is_player_side(line_side, advisor.player_side):
+                                    advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
+                                else:
+                                    # Unidad hostil destruida -> KILL CONFIRMADO
+                                    domain = "SUB" if is_sunk else "BDA"
+                                    if lang == "es":
+                                        verb = "hundido" if is_sunk else "destruido"
+                                        sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
+                                        dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
+                                    else:
+                                        verb = "sunk" if is_sunk else "destroyed"
+                                        sp = f"Splash confirmed! Target {clean_target} {verb}."
+                                        dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
+
+                                    advisor.alert_queue.put(VoiceAlert(
+                                        priority=PRIORITY_HIGH,
+                                        timestamp=time.time(),
+                                        domain=domain,
+                                        text_display=dp,
+                                        text_speech=sp,
+                                        ttl_seconds=15.0
+                                    ))
+                            continue
+
                         # Filtro estricto de Niebla de Guerra (Fog of War):
                         # Si la línea pertenece explícitamente a un bando enemigo, ignorarla de inmediato
                         if line_side and not is_player_side(line_side, advisor.player_side):
@@ -1264,46 +1304,6 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                     interrupt_current=True,
                                     is_radio=True
                                 ))
-                            continue
-
-                        # 3. Unit Destroyed / Sunk
-                        if "damage report:" in line.lower():
-                            continue
-
-                        m_dest = re_destroyed.search(line)
-                        if m_dest:
-                            raw_unit = m_dest.group(1).strip()
-                            clean_target = PhoneticHelper.clean_name(raw_unit)
-
-                            # Skip internal components (engines, mounts, antennas, radios, TTs)
-                            c_up = clean_target.upper()
-                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST")):
-                                continue
-                            if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
-                                is_sunk = "sunk" in line.lower()
-                                # Si la unidad pertenecia al bando del jugador o aliado -> BAJA ALIADA
-                                if is_player_side(line_side, advisor.player_side):
-                                    advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
-                                else:
-                                    # Unidad hostil destruida -> KILL CONFIRMADO
-                                    domain = "SUB" if is_sunk else "BDA"
-                                    if lang == "es":
-                                        verb = "hundido" if is_sunk else "destruido"
-                                        sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
-                                        dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
-                                    else:
-                                        verb = "sunk" if is_sunk else "destroyed"
-                                        sp = f"Splash confirmed! Target {clean_target} {verb}."
-                                        dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
-
-                                    advisor.alert_queue.put(VoiceAlert(
-                                        priority=PRIORITY_HIGH,
-                                        timestamp=time.time(),
-                                        domain=domain,
-                                        text_display=dp,
-                                        text_speech=sp,
-                                        ttl_seconds=15.0
-                                    ))
                             continue
 
                         # 4. Weapon Hit
