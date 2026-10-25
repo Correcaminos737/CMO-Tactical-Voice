@@ -178,11 +178,21 @@ class PhoneticHelper:
     def clean_name(cls, raw: str) -> str:
         if not raw:
             return ""
-        # Strip bracketed IDs first [5N69], then parentheses
+        # 1. Strip bracketed system IDs first: [S-75M Volkhov], [5N69]
         text = re.sub(r'\[.*?\]', '', raw)
-        text = re.sub(r'\(.*?\)', '', text)
+        # 2. If it has parentheses with a designation like (SA-2f Guideline), blend nicely
+        m_par = re.search(r'\(([^)]+)\)', text)
+        if m_par:
+            inner = m_par.group(1).strip()
+            outer = re.sub(r'\(.*?\)', '', text).strip()
+            if any(w in outer.lower() for w in ["sam", "battery", "radar", "site", "bn", "airbase"]):
+                text = f"{outer} {inner}"
+            elif inner and len(inner) > 2:
+                text = inner
+            else:
+                text = outer
         text = re.sub(r'\b(DDG-\d+|CG-\d+|SSN-\d+|SSK-\d+|FFG-\d+|CVN-\d+|USS|HMS)\b', '', text, flags=re.IGNORECASE)
-        text = text.replace('#', ' ').replace('-', ' ').replace('_', ' ')
+        text = text.replace('#', ' ').replace('_', ' ')
         cleaned = re.sub(r'\s+', ' ', text).strip()
         if cleaned in (")", "(", "#", "-", "/", "No cargo"):
             return ""
@@ -643,7 +653,10 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_bingo = re.compile(r"Unit:\s*([^:\n]+?)\s*is BINGO FUEL", re.IGNORECASE)
     re_departed = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+departed\s+([^.\n]+?)(?:\s+and\s+is\s+waiting\s+for\s+orders)?\.", re.IGNORECASE)
     re_rtb = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+is returning to base\s*\(([^)]+)\)", re.IGNORECASE)
-    re_sub_bda = re.compile(r"([A-Za-z0-9\-\s,#]+?)\s+reports BDA status change on contact:\s*([^:\-]+?)\s*-\s*([^\n\r]+)", re.IGNORECASE)
+    re_bda_report = re.compile(
+        r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+reports BDA status change on contact:\s*(.*?)\s+-\s+((?:Light|Medium|Moderate|Heavy|Minor|Severe|No)?\s*(?:damage|fire|destroyed|sunk|undamaged).*)$",
+        re.IGNORECASE
+    )
 
     print("\n🟢 Sistema activo. Despausa o avanza el tiempo en CMO (1x o Barra Espaciadora).")
     print("Para apagar el asesor, simplemente cierra esta ventana.\n")
@@ -886,23 +899,45 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                     ))
                             continue
 
-                        # 9. Submarine Acoustic BDA
-                        m_sbda = re_sub_bda.search(line)
-                        if m_sbda:
-                            observer = PhoneticHelper.clean_name(m_sbda.group(1).strip())
-                            c_id = m_sbda.group(2).strip()
-                            bda_desc = m_sbda.group(3).strip()
+                        # 9. BDA Report (Battle Damage Assessment)
+                        m_bda = re_bda_report.search(line)
+                        if m_bda:
+                            raw_obs = m_bda.group(1).strip()
+                            observer = PhoneticHelper.clean_name(raw_obs)
+                            c_id = PhoneticHelper.clean_name(m_bda.group(2).strip())
+                            bda_desc = m_bda.group(3).strip()
+
+                            is_sub = any(s in raw_obs.lower() for s in ["sub", "ssn", "ssk", "submarine"])
+                            domain = "SUB" if is_sub else "BDA"
+
                             if lang == "es":
-                                sp = f"Informe de submarino {observer}: BDA acústica en contacto {c_id}, {bda_desc}."
-                                dp = f"ASW / BDA SUBMARINA: {observer} sobre {c_id} -> {bda_desc}."
+                                desc_es = bda_desc
+                                desc_es = re.sub(r'\bLight damage\b', 'daños ligeros', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMedium damage\b|\bModerate damage\b', 'daños moderados', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bHeavy damage\b|\bHeavily damaged\b', 'daños graves', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bNo Fire\b', 'sin fuego', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMinor fire\b', 'con fuego leve', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMajor fire\b', 'con incendios graves', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bDestroyed\b', 'destruido', desc_es, flags=re.IGNORECASE)
+
+                                if is_sub:
+                                    sp = f"Informe de submarino {observer}: BDA en contacto {c_id}, {desc_es}."
+                                    dp = f"ASW / BDA SUBMARINA: {observer} sobre {c_id} -> {desc_es}."
+                                else:
+                                    sp = f"Evaluación de ataque de {observer}: Blanco {c_id}, {desc_es}."
+                                    dp = f"INFORME BDA: {observer} sobre {c_id} -> {desc_es}."
                             else:
-                                sp = f"Submarine report from {observer}: Acoustic BDA on contact {c_id}, {bda_desc}."
-                                dp = f"ASW / SUB BDA: {observer} on {c_id} -> {bda_desc}."
+                                if is_sub:
+                                    sp = f"Submarine report from {observer}: BDA on contact {c_id}, {bda_desc}."
+                                    dp = f"ASW / SUB BDA: {observer} on {c_id} -> {bda_desc}."
+                                else:
+                                    sp = f"Strike evaluation from {observer}: Target {c_id}, {bda_desc}."
+                                    dp = f"BDA REPORT: {observer} on {c_id} -> {bda_desc}."
 
                             advisor.alert_queue.put(VoiceAlert(
                                 priority=PRIORITY_HIGH,
                                 timestamp=time.time(),
-                                domain="SUB",
+                                domain=domain,
                                 text_display=dp,
                                 text_speech=sp,
                                 ttl_seconds=15.0
