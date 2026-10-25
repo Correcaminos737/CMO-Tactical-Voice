@@ -118,7 +118,7 @@ CIVILIAN_KEYWORDS = (
     "CIVILIAN", "MERCHANT", "TANKER", "CRUDE OIL TANKER", "CARGO", "CONTAINER",
     "FISHING", "DHOW", "TRAWLER", "SURVEILLANCE", "AIRLINER", "COMMERCIAL",
     "BIOLOGIC", "WHALE", "NEUTRAL", "NON-COMBATANT", "UNCLASSIFIED CIVILIAN",
-    "PASSENGER", "PLEASURE CRAFT", "BULK CARRIER"
+    "PASSENGER", "PLEASURE CRAFT", "BULK CARRIER", "BOEING", "AIRBUS", "ATR-", "CESSNA", "CITATION", "EMBRAER", "BOMBARDIER", "BOEING", "AIRBUS", "ATR-", "CESSNA", "CITATION", "EMBRAER", "BOMBARDIER"
 )
 
 MILITARY_KEYWORDS = (
@@ -351,6 +351,8 @@ class CmoTacticalVoiceAdvisor:
         self._piper_cache: Dict[str, Any] = {}
         self.player_side: Optional[str] = None
         self.known_contacts: set = set()
+        self.known_hostiles: set = set()
+        self.friendly_units: set = set()
         self.is_baseline_sync = False
         self.baseline_start_time = 0.0
         self.baseline_contacts_count = 0
@@ -549,20 +551,66 @@ class CmoTacticalVoiceAdvisor:
                 ttl_seconds=12.0
             ))
 
-    def notify_incoming_threat(self, weapon: str, target: str):
+    def notify_attack(self, weapon: str, target: str):
+        """Processes weapon attack lines and distinguishes friendly engagement from hostile threat."""
         now = time.time()
         c_weapon = PhoneticHelper.clean_weapon(weapon)
         c_tgt = PhoneticHelper.clean_unit_callsign(target)
+        w_up = weapon.upper()
+        tgt_up = target.upper()
 
+        FRIENDLY_WEAPONS = (
+            "AIM-120", "AMRAAM", "AIM-9", "SIDEWINDER", "AIM-7", "SPARROW", "AIM-54", "PHOENIX",
+            "SM-1", "SM-2", "SM-3", "SM-6", "STANDARD", "ESSM", "SEASPARROW", "MIM-104", "PATRIOT",
+            "HARPOON", "TOMAHAWK", "HELLFIRE", "MAVERICK", "JSOW", "JASSM", "JDAM", "SDB",
+            "PYTHON", "DERBY", "POPEYE", "SPICE", "METEOR", "ASRAAM", "IRIS-T", "MICA", "ASTER",
+            "STORM SHADOW", "SCALP", "EXOCET", "PENGUIN", "NSM", "JSM"
+        )
+
+        is_target_hostile = (
+            any(h in tgt_up for h in self.known_hostiles) or
+            any(h in tgt_up for h in (
+                "MIG-", "SU-", "FOXBAT", "FLOGGER", "FULCRUM", "FLANKER", "FIREBIRD", "BADGER",
+                "BEAR", "BACKFIRE", "BLACKJACK", "FISHBED", "FITTER", "FROGFOOT", "FENCER",
+                "H-6", "TU-", "J-10", "J-11", "J-15", "J-16", "J-20", "SILKWORM", "BOGHAMMAR"
+            ))
+        )
+        is_weapon_friendly = any(w in w_up for w in FRIENDLY_WEAPONS)
+
+        # CASE 1: Friendly offensive strike (Our missile intercepting enemy)
+        if is_weapon_friendly or is_target_hostile:
+            if (now - self.recent_threats.get(f"off_{c_tgt}", 0.0)) < 12.0:
+                return
+            self.recent_threats[f"off_{c_tgt}"] = now
+
+            if self.lang == "es":
+                dp = f"🚀 [ENGAGEMENT]: {c_weapon} en aproximación terminal contra {c_tgt}."
+                sp = f"Control de tiro: {c_weapon} en aproximación terminal hacia {c_tgt}."
+            else:
+                dp = f"🚀 [ENGAGEMENT]: {c_weapon} in terminal intercept on {c_tgt}."
+                sp = f"Fire control: {c_weapon} in terminal approach to {c_tgt}."
+
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="AIR",
+                text_display=dp,
+                text_speech=sp,
+                ttl_seconds=10.0,
+                is_radio=True
+            ))
+            return
+
+        # CASE 2: Hostile weapon attacking friendly unit (True Defensive Emergency)
         if (now - self.recent_threats.get(c_tgt, 0.0)) < 15.0:
             return
         self.recent_threats[c_tgt] = now
 
         if self.lang == "es":
-            dp = f"⚠️ [AMENAZA ENTRANTE]: {c_weapon} atacando a {c_tgt}."
+            dp = f"⚠️ [AMENAZA ENTRANTE]: {c_weapon} hostil atacando a {c_tgt}."
             sp = f"¡Alerta de combate! Arma hostil {c_weapon} en aproximación contra {c_tgt}. ¡Maniobra defensiva y contramedidas!"
         else:
-            dp = f"⚠️ [INBOUND THREAT]: {c_weapon} attacking {c_tgt}."
+            dp = f"⚠️ [INBOUND THREAT]: Hostile {c_weapon} attacking {c_tgt}."
             sp = f"Combat alert! Hostile weapon {c_weapon} inbound against {c_tgt}. Defensive maneuvers and countermeasures!"
 
         self.alert_queue.put(VoiceAlert(
@@ -575,6 +623,9 @@ class CmoTacticalVoiceAdvisor:
             interrupt_current=True,
             is_radio=True
         ))
+
+    def notify_incoming_threat(self, weapon: str, target: str):
+        self.notify_attack(weapon, target)
 
     def notify_radar_warning(self):
         now = time.time()
@@ -1276,9 +1327,26 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                 continue
 
                             c_id_up = c_id.upper()
-                            if c_id_up.startswith("BOGEY") or any(a in c_type_up for a in ("FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT", "YAK", "MIG", "SU-", "F-", "FORGER", "MULTIROLE", "HELICOPTER")):
+                            AIR_DESIGNATORS = (
+                                "BOGEY", "FIGHTER", "BOMBER", "AEW", "AWACS", "OECM", "MULTIROLE", "HELO", "HELICOPTER",
+                                "ATTACK", "RECON", "TANKER", "AIR", "UAV", "DRONE", "MISSILE", "VAMPIRE"
+                            )
+                            AIR_MODELS = (
+                                "FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT", "MULTIROLE", "HELICOPTER", "HELO",
+                                "YAK", "MIG", "SU-", "F-", "FORGER", "FOXHOUND", "FOXBAT", "FLOGGER", "FLANKER", "FULCRUM",
+                                "FARMER", "FISHBED", "FITTER", "FRESCO", "FAGOT", "FIREBIRD", "FROGFOOT", "FENCER",
+                                "BADGER", "BEAR", "BACKFIRE", "BLACKJACK", "BLINDER", "BULL", "BOUNDER", "BREWER",
+                                "H-6", "TU-", "IL-", "AN-", "J-", "JH-", "Y-", "KJ-", "Q-",
+                                "HORNET", "TOMCAT", "EAGLE", "VIPER", "FALCON", "RAPTOR", "LIGHTNING", "PHANTOM",
+                                "CORSAIR", "INTRUDER", "PROWLER", "GROWLER", "WARTHOG", "HARRIER", "HAWKEYE", "SENTRY",
+                                "ORION", "POSEIDON", "HERCULES", "GALAXY", "STRATOLIFTER", "STRATOFORTRESS", "LANCER",
+                                "SPIRIT", "MIRAGE", "RAFALE", "TYPHOON", "GRIPEN", "DRAKEN", "VIGGEN", "TORNADO",
+                                "SEASPRITE", "SEA HAWK", "SEA KING", "MERLIN", "WILDCAT", "LYNX", "HIND", "HAVOC",
+                                "HOKUM", "HIP", "HELIX", "HORMONE", "AIRLINER", "BOEING", "AIRBUS", "ATR-", "CESSNA", "CITATION"
+                            )
+                            if any(c_id_up.startswith(d) for d in AIR_DESIGNATORS) or any(a in c_type_up for a in AIR_MODELS):
                                 domain = "AIR"
-                            elif c_id_up.startswith("GOBLIN") or any(s in c_type_up for s in ("SUB", "SSN", "SSK", "SUBMARINE")):
+                            elif c_id_up.startswith("GOBLIN") or any(s in c_type_up for s in ("SUB", "SSN", "SSK", "SUBMARINE", "TORPEDO")):
                                 domain = "SUB"
                             else:
                                 domain = "SURFACE"
@@ -1289,6 +1357,13 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             else:
                                 sp = f"Contact {c_id} identified as {c_type}."
                                 dp = f"CONTACT IDENTIFIED: {c_id} -> {c_type} ({c_host})."
+
+                            if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
+                                advisor.known_hostiles.add(c_id.upper())
+                                advisor.known_hostiles.add(c_type.upper())
+                                for part in c_type.upper().split():
+                                    if len(part) > 2:
+                                        advisor.known_hostiles.add(part)
 
                             advisor.alert_queue.put(VoiceAlert(
                                 priority=PRIORITY_HIGH if c_host.upper() in ("HOSTILE", "UNFRIENDLY") else PRIORITY_NORMAL,
@@ -1325,7 +1400,11 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         m_dep = re_departed.search(line)
                         if m_dep:
                             if is_player_side(line_side, advisor.player_side):
-                                advisor.notify_departure(unit_raw=m_dep.group(1).strip(), base_raw=m_dep.group(2).strip())
+                                u_raw = m_dep.group(1).strip()
+                                advisor.friendly_units.add(u_raw.upper())
+                                c_u = PhoneticHelper.clean_unit_callsign(u_raw)
+                                advisor.friendly_units.add(c_u.upper())
+                                advisor.notify_departure(unit_raw=u_raw, base_raw=m_dep.group(2).strip())
                             continue
 
                         # 8. Return to Base (RTB - Only player/allied units)
