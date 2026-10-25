@@ -577,18 +577,29 @@ class CmoTacticalVoiceAdvisor:
         )
         is_weapon_friendly = any(w in w_up for w in FRIENDLY_WEAPONS)
 
-        # CASE 1: Friendly offensive strike (Our missile intercepting enemy)
+        # CASE 1: Friendly offensive strike (Our weapon attacking enemy)
         if is_weapon_friendly or is_target_hostile:
-            if (now - self.recent_threats.get(f"off_{c_tgt}", 0.0)) < 12.0:
+            category, _ = WeaponPhoneticHelper.get_info(weapon)
+            # Guns and cannon bursts: 30s cooldown per target to prevent gun spam
+            cooldown = 30.0 if category == "GUN" else 12.0
+            if (now - self.recent_threats.get(f"off_{c_tgt}", 0.0)) < cooldown:
                 return
             self.recent_threats[f"off_{c_tgt}"] = now
 
-            if self.lang == "es":
-                dp = f"🚀 [ENGAGEMENT]: {c_weapon} en aproximación terminal contra {c_tgt}."
-                sp = f"Control de tiro: {c_weapon} en aproximación terminal hacia {c_tgt}."
+            if category == "GUN":
+                if self.lang == "es":
+                    dp = f"⚔️ [ARTILLERÍA]: Fuego naval en curso contra {c_tgt}."
+                    sp = f"Control de tiro: Fuego de artillería naval en curso contra {c_tgt}."
+                else:
+                    dp = f"⚔️ [GUNFIRE]: Engaging {c_tgt} with naval gunfire."
+                    sp = f"Fire control: Engaging {c_tgt} with naval gunfire."
             else:
-                dp = f"🚀 [ENGAGEMENT]: {c_weapon} in terminal intercept on {c_tgt}."
-                sp = f"Fire control: {c_weapon} in terminal approach to {c_tgt}."
+                if self.lang == "es":
+                    dp = f"🚀 [ENGAGEMENT]: {c_weapon} en aproximación terminal contra {c_tgt}."
+                    sp = f"Control de tiro: {c_weapon} en aproximación terminal hacia {c_tgt}."
+                else:
+                    dp = f"🚀 [ENGAGEMENT]: {c_weapon} in terminal intercept on {c_tgt}."
+                    sp = f"Fire control: {c_weapon} in terminal approach to {c_tgt}."
 
             self.alert_queue.put(VoiceAlert(
                 priority=PRIORITY_NORMAL,
@@ -1248,10 +1259,18 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             continue
 
                         # 3. Unit Destroyed / Sunk
+                        if "damage report:" in line.lower():
+                            continue
+
                         m_dest = re_destroyed.search(line)
                         if m_dest:
                             raw_unit = m_dest.group(1).strip()
                             clean_target = PhoneticHelper.clean_name(raw_unit)
+
+                            # Skip internal components (engines, mounts, antennas, radios, TTs)
+                            c_up = clean_target.upper()
+                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST")):
+                                continue
                             if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
                                 is_sunk = "sunk" in line.lower()
                                 # Si la unidad pertenecia al bando del jugador o aliado -> BAJA ALIADA
