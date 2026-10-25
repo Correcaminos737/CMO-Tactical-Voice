@@ -955,7 +955,9 @@ def is_player_side(line_side: Optional[str], player_side: Optional[str]) -> bool
         return True
     if ls in US_SIDE_ALIASES and ps in US_SIDE_ALIASES:
         return True
-    if ls in ps or ps in ls:
+    if "/" in ps and any(ls == part.strip() for part in ps.split("/")):
+        return True
+    if "/" in ls and any(ps == part.strip() for part in ls.split("/")):
         return True
     return False
 
@@ -1165,6 +1167,12 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                         if not line:
                             continue
+
+                        # Filtro estricto de Niebla de Guerra (Fog of War):
+                        # Si la línea pertenece explícitamente a un bando enemigo, ignorarla de inmediato
+                        if line_side and not is_player_side(line_side, advisor.player_side):
+                            if line_side.upper() not in ("MAP MARKERS", "GLOBAL"):
+                                continue
 
                         # A. Alerta RWR / Radar Lock
                         if re_radar_illum.search(line):
