@@ -133,8 +133,18 @@ MILITARY_KEYWORDS = (
 def acquire_single_instance_lock():
     """Ensures only a single instance runs to prevent echo/sound collisions."""
     try:
+        import subprocess
+        my_pid = os.getpid()
+        # Automatically terminate any orphan advisor instance to prevent duplicate audio
+        kill_cmd = f'powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object {{ $_.ProcessId -ne {my_pid} -and ($_.CommandLine -like \'*tactical_voice*\' -or $_.CommandLine -like \'*cmo_tactical_voice*\') }} | ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}"'
+        try:
+            subprocess.run(kill_cmd, shell=True, capture_output=True, timeout=4)
+            time.sleep(0.5)
+        except Exception:
+            pass
+
         kernel32 = ctypes.windll.kernel32
-        mutex_name = "Global\\CMO_Tactical_Voice_Advisor_Mutex_v12"
+        mutex_name = "Global\\CMO_Tactical_Voice_Advisor_Mutex"
         mutex = kernel32.CreateMutexW(None, False, mutex_name)
         last_error = kernel32.GetLastError()
         ERROR_ALREADY_EXISTS = 183
@@ -175,6 +185,77 @@ class PhoneticHelper:
         return re.sub(r'\s+', ' ', text).strip()
 
     @classmethod
+    def clean_base(cls, raw: str) -> str:
+        if not raw:
+            return "su base"
+        b = str(raw).strip()
+        b = re.sub(r'\s+and\s+is\s+waiting\s+for\s+orders.*$', '', b, flags=re.IGNORECASE).strip()
+        b = re.sub(r'\(.*?\)', '', b)
+        b = re.sub(r'\[.*?\]', '', b)
+        return re.sub(r'\s+', ' ', b).strip()
+
+    @classmethod
+    def clean_unit_callsign(cls, raw: str) -> str:
+        """Translates unit strings like 'Strike Ftr #5 (F/A-18C Hornet)' to 'Hornet 5'."""
+        if not raw:
+            return ""
+        text = re.sub(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*", "", raw)
+        text = re.sub(r"^\[.*?\]\s*", "", text).strip()
+
+        m_call = re.search(r'\[([A-Z\s0-9]+)\]', text)
+        callsign = m_call.group(1).strip() if m_call else ""
+
+        m_model = re.search(r'\(([^)]+)\)', text)
+        model = m_model.group(1).strip() if m_model else ""
+
+        m_num = re.search(r'#(\d+)', text)
+        num_str = f" {m_num.group(1)}" if m_num else ""
+
+        m_up = (model + " " + text).upper()
+        if "HORNET" in m_up or "F/A-18" in m_up or "F-18" in m_up:
+            base_name = f"Hornet{num_str}"
+        elif "TOMCAT" in m_up or "F-14" in m_up:
+            base_name = f"Tomcat{num_str}"
+        elif "EAGLE" in m_up or "F-15" in m_up:
+            base_name = f"F-15{num_str}"
+        elif "VIPER" in m_up or "F-16" in m_up or "FALCON" in m_up:
+            base_name = f"F-16{num_str}"
+        elif "LIGHTNING" in m_up or "F-35" in m_up:
+            base_name = f"F-35{num_str}"
+        elif "RAPTOR" in m_up or "F-22" in m_up:
+            base_name = f"F-22{num_str}"
+        elif "TYPHOON" in m_up or "EUROFIGHTER" in m_up:
+            base_name = f"Eurofighter{num_str}"
+        elif "RAFALE" in m_up:
+            base_name = f"Rafale{num_str}"
+        elif "HARRIER" in m_up or "AV-8" in m_up:
+            base_name = f"Harrier{num_str}"
+        elif "HAWKEYE" in m_up or "E-2" in m_up:
+            base_name = f"Hawkeye{num_str}"
+        elif "SENTRY" in m_up or "E-3" in m_up:
+            base_name = f"AWACS Sentry{num_str}"
+        elif "PROWLER" in m_up or "EA-6" in m_up:
+            base_name = f"Prowler{num_str}"
+        elif "GROWLER" in m_up or "EA-18" in m_up:
+            base_name = f"Growler{num_str}"
+        elif "CORSAIR" in m_up or "A-7" in m_up:
+            base_name = f"Corsair{num_str}"
+        elif "INTRUDER" in m_up or "A-6" in m_up:
+            base_name = f"Intruder{num_str}"
+        elif "WARTHOG" in m_up or "A-10" in m_up:
+            base_name = f"A-10{num_str}"
+        elif "PHANTOM" in m_up or "F-4" in m_up:
+            base_name = f"Phantom{num_str}"
+        elif model:
+            base_name = f"{model}{num_str}"
+        else:
+            base_name = cls.clean_name(text)
+
+        if callsign:
+            return f"{callsign.title()} ({base_name})"
+        return base_name
+
+    @classmethod
     def clean_weapon(cls, raw: str) -> str:
         if not raw:
             return ""
@@ -200,6 +281,80 @@ class CmoTacticalVoiceAdvisor:
         self.known_contacts: set = set()
         self.is_baseline_sync = True
         self.baseline_start_time = 0.0
+
+        # Departure Section / Strike Package Batching
+        self.departure_buffer: Dict[str, List[Dict[str, Any]]] = {}
+        self.departure_lock = threading.Lock()
+        self.departure_timer: Optional[threading.Timer] = None
+
+    def notify_departure(self, unit_raw: str, base_raw: str):
+        """Batches multi-ship takeoffs within 1.8s into a single military radio announcement."""
+        now = time.time()
+        c_unit = PhoneticHelper.clean_unit_callsign(unit_raw)
+        c_base = PhoneticHelper.clean_base(base_raw)
+
+        with self.departure_lock:
+            if c_base not in self.departure_buffer:
+                self.departure_buffer[c_base] = []
+            self.departure_buffer[c_base].append({"raw": unit_raw, "clean": c_unit, "time": now})
+
+            if self.departure_timer:
+                self.departure_timer.cancel()
+            self.departure_timer = threading.Timer(1.8, self._flush_departure_buffer)
+            self.departure_timer.daemon = True
+            self.departure_timer.start()
+
+    def _flush_departure_buffer(self):
+        with self.departure_lock:
+            buffer_copy = {k: list(v) for k, v in self.departure_buffer.items()}
+            self.departure_buffer.clear()
+            self.departure_timer = None
+
+        now = time.time()
+        for base_name, items in buffer_copy.items():
+            if not items:
+                continue
+            is_carrier = any(c in base_name.lower() for c in ["carrier", "portaaviones", "cvn", "cv", "lha", "lhd"])
+
+            if self.lang == "es":
+                caller = "Operaciones de cubierta" if is_carrier else "Control de vuelo"
+                if len(items) == 1:
+                    u = items[0]["clean"]
+                    disp = f"VUELO: {u} en el aire desde {base_name}."
+                    speech = f"{caller}: {u} en el aire desde {base_name}."
+                elif len(items) == 2:
+                    u1 = items[0]["clean"]
+                    disp = f"VUELO EN SECCIÓN: 2x aeronaves ({u1}) en el aire desde {base_name}."
+                    speech = f"{caller}: Sección de dos aeronaves en el aire desde {base_name}."
+                else:
+                    count = len(items)
+                    u_type = items[0]["clean"].split()[0]
+                    disp = f"LANZAMIENTO EN PAQUETE: {count}x {u_type} en el aire desde {base_name}."
+                    speech = f"{caller}: Paquete de {count} {u_type} en el aire desde {base_name}."
+            else:
+                caller = "Flight deck ops" if is_carrier else "Flight operations"
+                if len(items) == 1:
+                    u = items[0]["clean"]
+                    disp = f"FLIGHT OPS: {u} airborne from {base_name}."
+                    speech = f"{caller}: {u} airborne from {base_name}."
+                elif len(items) == 2:
+                    u1 = items[0]["clean"]
+                    disp = f"SECTION DEPARTURE: 2-ship flight ({u1}) airborne from {base_name}."
+                    speech = f"{caller}: 2-ship flight airborne from {base_name}."
+                else:
+                    count = len(items)
+                    u_type = items[0]["clean"].split()[0]
+                    disp = f"STRIKE PACKAGE: {count}x {u_type} airborne from {base_name}."
+                    speech = f"{caller}: Strike package of {count} {u_type} airborne from {base_name}."
+
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="AIR",
+                text_display=disp,
+                text_speech=speech,
+                ttl_seconds=15.0
+            ))
 
     def preload_voices(self):
         """Preloads Piper ONNX neural models into RAM for ultra-fast 150ms synthesis."""
@@ -455,7 +610,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_hit = re.compile(r"Weapon:\s*([^:\n]+?)\s*(?:has impacted|has detonated near)\s*([^:\(\n]+)", re.IGNORECASE)
     re_destroyed = re.compile(r"(?:Unit:\s*)?([A-Za-z0-9\-\s,#\(\)\'\"]+?)\s+has (?:been destroyed|sunk|run out of fuel and crashed)", re.IGNORECASE)
     re_bingo = re.compile(r"Unit:\s*([^:\n]+?)\s*is BINGO FUEL", re.IGNORECASE)
-    re_departed = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+departed\s+([^.\n]+?)\.", re.IGNORECASE)
+    re_departed = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+departed\s+([^.\n]+?)(?:\s+and\s+is\s+waiting\s+for\s+orders)?\.", re.IGNORECASE)
     re_unit_ready = re.compile(r"([A-Za-z0-9\-\s,#\[\]]+?\([^)]+\))\s+is ready at\s+([^.\n\r]+)", re.IGNORECASE)
     re_sub_bda = re.compile(r"([A-Za-z0-9\-\s,#]+?)\s+reports BDA status change on contact:\s*([^:\-]+?)\s*-\s*([^\n\r]+)", re.IGNORECASE)
 
@@ -481,7 +636,12 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         file_pos = f.tell()
 
                     for raw_line in lines:
-                        line = raw_line.strip()
+                        raw_s = raw_line.strip()
+                        if not raw_s:
+                            continue
+
+                        # Clean timestamp and side prefix before evaluating regexes
+                        line = re.sub(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*(?:\[.*?\])?\s*", "", raw_s).strip()
                         if not line:
                             continue
 
@@ -646,23 +806,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         # 7. Section Departed (Takeoff)
                         m_dep = re_departed.search(line)
                         if m_dep:
-                            u_name = PhoneticHelper.clean_name(m_dep.group(1).strip())
-                            base_name = PhoneticHelper.clean_name(m_dep.group(2).strip())
-                            if lang == "es":
-                                sp = f"Operaciones de vuelo: {u_name} en el aire desde {base_name}."
-                                dp = f"VUELO: {u_name} despegó de {base_name}."
-                            else:
-                                sp = f"Flight ops: {u_name} airborne from {base_name}."
-                                dp = f"FLIGHT OPS: {u_name} airborne from {base_name}."
-
-                            advisor.alert_queue.put(VoiceAlert(
-                                priority=PRIORITY_NORMAL,
-                                timestamp=time.time(),
-                                domain="AIR",
-                                text_display=dp,
-                                text_speech=sp,
-                                ttl_seconds=12.0
-                            ))
+                            advisor.notify_departure(unit_raw=m_dep.group(1).strip(), base_raw=m_dep.group(2).strip())
                             continue
 
                         # 8. Ready on Deck
