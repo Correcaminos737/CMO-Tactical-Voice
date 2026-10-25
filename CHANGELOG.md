@@ -5,35 +5,36 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.2.11] - 2026-10-25
+
+### 🛡️ Critical Bug Fixes & Combat Polish / Correcciones Críticas y Pulido de Combate
+- **Filtro Estricto de Niebla de Guerra / Strict Fog of War Isolation:**
+  - Corregida la fuga de inteligencia táctica y telemetría enemiga. El asesor ahora descarta al 100% cualquier línea que pertenezca explícitamente a un bando contrario al inicio del procesamiento (evitando por ejemplo que un jugador del Pacto de Varsovia escuche las detecciones de submarinos de la OTAN como *S 66 Greif* o *S 320 Narhvalen*, o fallos de misiles Exocet enemigos).
+  - Blindada la función de comprobación de bandos para evitar colisiones accidentales de acrónimos (como `US` coincidiendo dentro de `USSR`).
+- **Discriminación IFF en Ataques Balísticos / Combat IFF Discrimination:**
+  - Los misiles lanzados por el jugador o sus aliados contra blancos enemigos (como *AIM-120 AMRAAM* atacando a un *MiG-23* o *MiG-25*) ahora se anuncian como telemetría ofensiva profesional (`🚀 [ENGAGEMENT]`), eliminando las falsas alarmas que ordenaban al jugador activar contramedidas contra sus propios misiles.
+  - Las armas hostiles que amenacen a buques o aeronaves aliadas mantienen la alarma crítica de combate (`🚨 [CRÍTICO] ⚠️ [AMENAZA ENTRANTE]`).
+- **Resolución de Dominio de Bombarderos y Prefijos Aéreos / Aircraft Domain Resolution:**
+  - Corregido el reconocimiento aéreo para que bombarderos estratégicos (como *H-6M Badger*, *Tu-95 Bear*, etc.) y contactos bautizados como `Bomber #`, `Fighter #`, `AEW #`, `OECM #` o `Multirole #` reciban el icono aéreo (`✈️`) y la voz del Oficial de Operaciones Aéreas (Karpov) en lugar de ser tratados como buques de superficie.
+- **Filtro de Cañoneo Naval y Reportes de Averías / Naval Gunfire & Subsystem Filter:**
+  - Los avisos de averías internas de buques (`damage report: ... has been destroyed`) ahora se ignoran estrictamente para los Kills. El asesor ya no cantará montajes de 14.5mm, radios UHF, periscopios o tubos de torpedos de 450mm como si fueran buques enteros destruidos.
+  - Las ráfagas rápidas de artillería naval (cañones de 127mm o 76mm en duelos contra lanchas torpederas Swatow o P-4) se agrupan con un enfriamiento de 30 segundos (`⚔️ [ARTILLERÍA] / [GUNFIRE]`) para evitar saturación en combates a corta distancia.
+- **Filtro de Tráfico Aéreo Comercial Neutral / Neutral Airliner Filter:**
+  - Ampliadas las palabras clave para que los aviones civiles de pasajeros de aerolíneas neutrales (*Boeing 777*, *Boeing 737*, *ATR-42*, *Cessna Citation*) no saturen las comunicaciones de combate.
+- **Cabecera de Consola Limpia:**
+  - Eliminado el número de versión visual del banner de inicio para un acabado profesional y atemporal.
+
+---
+
 ## [1.2.1] - 2026-10-25
-
-### 🚀 Nuevas Características y Paridad con War Room / New Features & War Room Parity
-- **Detección de Contactos con Marcaciones y Distancias en Millas Náuticas (`re_new_contact`):**
-  - El sistema vuelve a cantar marcaciones y distancias estimadas (ej. *"Bogey 12 contacto, al 245, a 30 millas"* / *"Bogey 12 contact, bearing 245, at 30 miles"*).
-  - Incluye filtro anti-saturación militar: si se detectan 3 o más trazas aéreas simultáneas (paquete enemigo en aproximación), la radio consolida el aviso automáticamente (ej. *"Detección múltiple: paquete de 4 trazas aéreas aproximándose al 240"*).
-- **Avisos de Ataques Entrantes e Intercepciones (`re_incoming_attack`):**
-  - Alerta inmediata de combate cuando un arma hostil (misil o torpedo) inicia trayectoria de ataque contra un buque o aeronave aliada (ej. *"¡Alerta táctica! Silkworm atacando a Sterett"*).
-- **Alerta RWR de Iluminación de Guiado Radar Hostil (`re_radar_illum`):**
-  - Detección de lock-on / iluminación por radar de dirección de tiro enemigo sobre unidades del jugador con aviso de alerta electrónica.
-- **Diferenciación de Bajas Aliadas vs Derribos Enemigos:**
-  - Si una aeronave o buque del jugador es derribado o hundido, se emite una alarma crítica de pérdida en combate (*"¡Atención sala de operaciones! Baja aliada confirmada"*).
-  - Si la unidad destruida es enemiga, se emite la confirmación de impacto/splash (*"¡Impacto definitivo confirmado! Blanco destruido"*).
-- **Telemetría Balística de Salvas y Endgame:**
-  - Informes de agotamiento cinético de misiles (*"Agotó energía cinética fuera de envolvente"*), pérdida de guiado radar (*"Misil ciego por pérdida de radar"*), fallos de motor o tiros fallidos consolidados.
-- **Control de Daños y Subsistemas Críticos:**
-  - Alerta de averías en buques aliados: incendios a bordo, vías de agua / inundaciones, timón averiado o metralla en cabina.
-- **Soporte de Bando 100% Universal:**
-  - Eliminada cualquier restricción que atara el asesor a bandos OTAN o EE.UU. Ahora se puede jugar con cualquier país del mundo (Etiopía, Irán, Unión Soviética, Suecia, etc.) y el asesor detecta y sincroniza automáticamente las comunicaciones del bando activo del jugador sin perder eventos.
-- **Modo de Prueba Táctica Integrado (`--test`):**
-  - Permite ejecutar `python cmo_tactical_voice.py --test --lang es` o `--lang en` para escuchar una secuencia completa de combate simulada sin necesidad de arrancar el juego.
-
-### 🐛 Correcciones de Errores / Bug Fixes
-- **Corrección de Regex de Clasificación de Contactos:**
-  - Corregido el bug donde los modelos de contacto se cortaban en la primera letra (`Y` en vez de `Yak-38`, `C` en vez de `Cargo`, `P` en vez de `Patrol Craft`). Ahora se extrae el nombre completo del modelo.
-- **Filtro de Tráfico Mercante y Civil Restablecido:**
-  - Al resolverse el nombre completo del modelo, los buques civiles (`Cargo`, `Tanker`, `Fishing`) quedan correctamente filtrados y silenciados, evitando la saturación por tráfico neutral.
-- **Aislamiento de Detecciones Enemigas:**
-  - Evitada la fuga de detecciones del bando contrario en las comunicaciones aliadas.
+- Paridad con War Room: restauración de marcaciones y distancias en millas náuticas (`re_new_contact`).
+- Filtro militar anti-saturación de paquetes aéreos.
+- Alertas de amenazas entrantes (`re_incoming_attack`) y RWR de radar lock (`re_radar_illum`).
+- Diferenciación de bajas aliadas vs kills/splashes enemigos.
+- Telemetría balística de salvas y endgame (agotamiento de energía, pérdida de radar, averías).
+- Control de daños y averías críticas (incendios, timón averiado, inundaciones).
+- Soporte de bando 100% universal para cualquier país del mundo sin restricciones.
+- Modo de prueba táctica integrado (`--test`).
 
 ---
 

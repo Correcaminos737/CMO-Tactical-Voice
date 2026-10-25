@@ -34,7 +34,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from cmo_locator import detect_cmo_logs_dir, save_cmo_path
 from voice_downloader import ensure_voices_available
 
-__version__ = "1.2.1"
+__version__ = "1.2.11"
 
 # =============================================================================
 # 1. VOICE CONFIGURATION & CATALOG
