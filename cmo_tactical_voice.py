@@ -34,7 +34,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from cmo_locator import detect_cmo_logs_dir, save_cmo_path
 from voice_downloader import ensure_voices_available
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # =============================================================================
 # 1. VOICE CONFIGURATION & CATALOG
@@ -270,6 +270,41 @@ class PhoneticHelper:
         return base_name
 
     @classmethod
+    def clean_detector(cls, raw: str) -> str:
+        if not raw:
+            return ""
+        d = re.sub(r'\[.*?\]', '', raw).strip()
+        d = re.sub(r'(DDG-\d+|CG-\d+|SSN-\d+|SSK-\d+|FFG-\d+|CVN-\d+|USS|HMS|DLG\s*\d+)', '', d, flags=re.IGNORECASE).strip()
+        m_par = re.search(r'\(([^)]+)\)', d)
+        if m_par:
+            return m_par.group(1).strip()
+        return d.split(',')[0].strip()
+
+    @classmethod
+    def format_bearing(cls, bearing: Any, lang: str = "es") -> str:
+        if bearing is None or str(bearing).strip() == "":
+            return ""
+        try:
+            b = int(float(str(bearing).strip()))
+            return f"al {b:03d}" if lang == "es" else f"bearing {b:03d}"
+        except Exception:
+            return ""
+
+    @classmethod
+    def format_distance(cls, dist_raw: Any, lang: str = "es") -> str:
+        if not dist_raw:
+            return ""
+        s = str(dist_raw).lower().replace("nm", "").replace(",", ".").strip()
+        try:
+            val = float(s)
+            if val < 1.0:
+                return "a menos de una milla" if lang == "es" else "under one mile"
+            m = round(val)
+            return f"a {m} millas" if lang == "es" else f"at {m} miles"
+        except Exception:
+            return f"a {dist_raw}" if lang == "es" else f"at {dist_raw}"
+
+    @classmethod
     def clean_weapon(cls, raw: str) -> str:
         if not raw:
             return ""
@@ -281,6 +316,29 @@ class PhoneticHelper:
 # =============================================================================
 # 3. TACTICAL VOICE ADVISOR CORE ENGINE
 # =============================================================================
+
+
+# =============================================================================
+# 2B. WEAPON & BALLISTIC CLASSIFIER
+# =============================================================================
+
+class WeaponPhoneticHelper:
+    @classmethod
+    def get_info(cls, weapon_raw: str) -> Tuple[str, str]:
+        w_up = weapon_raw.upper()
+        if any(t in w_up for t in ("TORPEDO", "MK46", "MK 46", "MK-46", "MK48", "MK 48", "MK-48", "MK37", "MK54", "53-65", "53-56", "SET-65", "SET-53", "TEST-71", "STING RAY", "SPEARFISH", "TIGERFISH", "MU90")):
+            category = "TORPEDO"
+        elif any(r in w_up for r in ("HYDRA", "ZUNI", "ROCKET", "COHETE")):
+            category = "ROCKET"
+        elif any(b in w_up for b in ("CBU-", "ROCKEYE", "MK20", "MK81", "MK82", "MK83", "MK84", "GBU-", "BOMB", "FAB-", "KAB-", "BETAB", "RBK-")):
+            category = "BOMB"
+        elif any(g in w_up for g in ("76MM", "127MM", "5\"/54", "5\"/38", "3\"/50", "20MM", "23MM", "30MM", "GUN", "CANNON")):
+            category = "GUN"
+        else:
+            category = "MISSILE"
+
+        clean = PhoneticHelper.clean_weapon(weapon_raw)
+        return category, clean
 
 class CmoTacticalVoiceAdvisor:
     def __init__(self, lang: str = "es", debug: bool = True):
@@ -302,6 +360,22 @@ class CmoTacticalVoiceAdvisor:
         self.departure_lock = threading.Lock()
         self.departure_timer: Optional[threading.Timer] = None
         self.recent_flight_ops: Dict[str, float] = {}
+
+        # Contact Batching & Anti-Saturation Buffer (War Room)
+        self.contact_buffer: List[Dict[str, Any]] = []
+        self.contact_lock = threading.Lock()
+        self.contact_timer: Optional[threading.Timer] = None
+
+        # Threat, RWR and Damage Cooldowns
+        self.recent_threats: Dict[str, float] = {}
+        self.last_rwr_time: float = 0.0
+        self.recent_damage: Dict[str, float] = {}
+
+        # Endgame Salvo Batching
+        self.endgame_salvo_buffer: Dict[str, Dict[str, Any]] = {}
+        self.endgame_lock = threading.Lock()
+        self.endgame_timer: Optional[threading.Timer] = None
+        self.recent_endgame_spoken: Dict[str, float] = {}
 
     def notify_departure(self, unit_raw: str, base_raw: str):
         """Batches multi-ship takeoffs within 1.8s into a single military radio announcement."""
@@ -370,6 +444,278 @@ class CmoTacticalVoiceAdvisor:
                 text_display=disp,
                 text_speech=speech,
                 ttl_seconds=15.0
+            ))
+
+
+    def notify_contact(self, contact_id: str, domain: str, name: str,
+                       bearing: Optional[float] = None, distance: Optional[str] = None,
+                       detector: Optional[str] = None):
+        """Batches and consolidates new contact detections with bearings and distances."""
+        c_clean_key = PhoneticHelper.clean_name(contact_id).upper()
+        if any(civ in c_clean_key for civ in CIVILIAN_KEYWORDS):
+            self.known_contacts.add(c_clean_key)
+            return
+
+        if c_clean_key in self.known_contacts:
+            return
+        self.known_contacts.add(c_clean_key)
+
+        if self.is_baseline_sync:
+            self.baseline_contacts_count += 1
+            return
+
+        item = {
+            "id": contact_id,
+            "domain": domain.upper(),
+            "name": PhoneticHelper.clean_name(name),
+            "bearing": bearing,
+            "distance": distance,
+            "detector": detector,
+            "time": time.time()
+        }
+
+        with self.contact_lock:
+            self.contact_buffer.append(item)
+            if self.contact_timer:
+                self.contact_timer.cancel()
+            self.contact_timer = threading.Timer(1.8, self._flush_contact_buffer)
+            self.contact_timer.daemon = True
+            self.contact_timer.start()
+
+    def _flush_contact_buffer(self):
+        with self.contact_lock:
+            items = list(self.contact_buffer)
+            self.contact_buffer.clear()
+            self.contact_timer = None
+
+        if not items:
+            return
+
+        now = time.time()
+        # Saturation check: if >= 3 air tracks, consolidate into single strike report
+        air_items = [x for x in items if "AIR" in x["domain"] or x["id"].upper().startswith("BOGEY")]
+        if len(air_items) >= 3:
+            bearings = [x["bearing"] for x in air_items if x["bearing"] is not None]
+            avg_b_str = ""
+            if bearings:
+                avg_val = int(sum(bearings) / len(bearings))
+                b_str = PhoneticHelper.format_bearing(avg_val, self.lang)
+                avg_b_str = f" aproximándose {b_str}" if self.lang == "es" else f" bearing {avg_val:03d}"
+
+            count = len(air_items)
+            if self.lang == "es":
+                dp = f"⚠️ [SATURACIÓN AÉREA]: Detectadas {count} nuevas trazas aéreas{avg_b_str}."
+                sp = f"Atención sala de operaciones. Detección múltiple: paquete de {count} trazas aéreas{avg_b_str}."
+            else:
+                dp = f"⚠️ [AIR SATURATION]: {count} new air tracks detected{avg_b_str}."
+                sp = f"Operations room: Multiple detections: package of {count} air tracks{avg_b_str}."
+
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="AIR",
+                text_display=dp,
+                text_speech=sp,
+                ttl_seconds=14.0
+            ))
+            # Process remaining non-air items
+            items = [x for x in items if x not in air_items]
+
+        # Individual reporting
+        for it in items:
+            b_str = PhoneticHelper.format_bearing(it.get("bearing"), self.lang)
+            d_str = PhoneticHelper.format_distance(it.get("distance"), self.lang)
+            det = PhoneticHelper.clean_detector(it.get("detector", ""))
+            det_prefix = f"{det}: " if det else ""
+            c_name = it["name"]
+
+            details = [x for x in [b_str, d_str] if x]
+            details_str = ", ".join(details) if details else ""
+
+            if self.lang == "es":
+                disp = f"🎯 CONTACTO: {det_prefix}{c_name} | {details_str}"
+                speech = f"{det_prefix}{c_name} contacto, {details_str}." if det else f"{c_name} contacto, {details_str}."
+            else:
+                disp = f"🎯 CONTACT: {det_prefix}{c_name} | {details_str}"
+                speech = f"{det_prefix}{c_name} contact, {details_str}." if det else f"{c_name} contact, {details_str}."
+
+            domain_key = "SURFACE" if "SKUNK" in it["id"].upper() else ("SUB" if "GOBLIN" in it["id"].upper() else "AIR")
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain=domain_key,
+                text_display=disp,
+                text_speech=speech,
+                ttl_seconds=12.0
+            ))
+
+    def notify_incoming_threat(self, weapon: str, target: str):
+        now = time.time()
+        c_weapon = PhoneticHelper.clean_weapon(weapon)
+        c_tgt = PhoneticHelper.clean_unit_callsign(target)
+
+        if (now - self.recent_threats.get(c_tgt, 0.0)) < 15.0:
+            return
+        self.recent_threats[c_tgt] = now
+
+        if self.lang == "es":
+            dp = f"⚠️ [AMENAZA ENTRANTE]: {c_weapon} atacando a {c_tgt}."
+            sp = f"¡Alerta de combate! Arma hostil {c_weapon} en aproximación contra {c_tgt}. ¡Maniobra defensiva y contramedidas!"
+        else:
+            dp = f"⚠️ [INBOUND THREAT]: {c_weapon} attacking {c_tgt}."
+            sp = f"Combat alert! Hostile weapon {c_weapon} inbound against {c_tgt}. Defensive maneuvers and countermeasures!"
+
+        self.alert_queue.put(VoiceAlert(
+            priority=PRIORITY_CRITICAL,
+            timestamp=now,
+            domain="CRITICAL",
+            text_display=dp,
+            text_speech=sp,
+            ttl_seconds=10.0,
+            interrupt_current=True,
+            is_radio=True
+        ))
+
+    def notify_radar_warning(self):
+        now = time.time()
+        if (now - self.last_rwr_time) < 25.0:
+            return
+        self.last_rwr_time = now
+
+        if self.lang == "es":
+            dp = "📡 [ALERTA RWR]: Iluminación de guiado radar enemiga detectada."
+            sp = "¡Alerta electrónica! Iluminación de radar hostil activa en sector. Posible misil guiado en aproximación contra nuestras unidades."
+        else:
+            dp = "📡 [RWR WARNING]: Hostile radar guidance illumination detected."
+            sp = "Electronic warning! Hostile radar guidance illumination active in sector. Possible guided missile inbound."
+
+        self.alert_queue.put(VoiceAlert(
+            priority=PRIORITY_HIGH,
+            timestamp=now,
+            domain="INTEL",
+            text_display=dp,
+            text_speech=sp,
+            ttl_seconds=12.0
+        ))
+
+    def notify_friendly_loss(self, unit_name: str, reason: str = ""):
+        now = time.time()
+        c_unit = PhoneticHelper.clean_unit_callsign(unit_name)
+        if self.lang == "es":
+            dp = f"🚨 [BAJA ALIADA]: {c_unit} HA SIDO DESTRUIDO."
+            sp = f"¡Atención sala de operaciones! ¡Baja aliada confirmada! {c_unit} ha sido destruido en combate."
+        else:
+            dp = f"🚨 [FRIENDLY LOSS]: {c_unit} DESTROYED IN COMBAT."
+            sp = f"Attention command: Friendly loss confirmed! {c_unit} has been destroyed in combat."
+
+        self.alert_queue.put(VoiceAlert(
+            priority=PRIORITY_CRITICAL,
+            timestamp=now,
+            domain="CRITICAL",
+            text_display=dp,
+            text_speech=sp,
+            ttl_seconds=15.0,
+            interrupt_current=True
+        ))
+
+    def notify_subsystem_damage(self, unit: str, desc: str):
+        now = time.time()
+        c_unit = PhoneticHelper.clean_unit_callsign(unit)
+        if (now - self.recent_damage.get(c_unit, 0.0)) < 20.0:
+            return
+        self.recent_damage[c_unit] = now
+
+        d_text = desc.strip()
+        if self.lang == "es":
+            dp = f"🔥 [CONTROL DE AVERÍAS]: {c_unit} reporta {d_text}."
+            sp = f"Control de averías: {c_unit} reporta daños críticos: {d_text}."
+        else:
+            dp = f"🔥 [DAMAGE CONTROL]: {c_unit} reports {d_text}."
+            sp = f"Damage control: {c_unit} reports critical damage: {d_text}."
+
+        self.alert_queue.put(VoiceAlert(
+            priority=PRIORITY_CRITICAL,
+            timestamp=now,
+            domain="BDA",
+            text_display=dp,
+            text_speech=sp,
+            ttl_seconds=12.0
+        ))
+
+    def notify_missile_endgame(self, weapon_raw: str, reason: str, target_raw: str = ""):
+        category, family = WeaponPhoneticHelper.get_info(weapon_raw)
+        c_target = PhoneticHelper.clean_unit_callsign(target_raw) if target_raw else ""
+        batch_key = f"{family}_{reason}"
+        now = time.time()
+
+        if (now - self.recent_endgame_spoken.get(batch_key, 0.0)) < 10.0:
+            return
+
+        with self.endgame_lock:
+            if batch_key not in self.endgame_salvo_buffer:
+                self.endgame_salvo_buffer[batch_key] = {
+                    "family": family, "category": category, "reason": reason,
+                    "target": c_target, "count": 1
+                }
+            else:
+                self.endgame_salvo_buffer[batch_key]["count"] += 1
+
+            if self.endgame_timer:
+                self.endgame_timer.cancel()
+            self.endgame_timer = threading.Timer(1.8, self._flush_endgame_buffer)
+            self.endgame_timer.daemon = True
+            self.endgame_timer.start()
+
+    def _flush_endgame_buffer(self):
+        with self.endgame_lock:
+            items = list(self.endgame_salvo_buffer.values())
+            self.endgame_salvo_buffer.clear()
+            self.endgame_timer = None
+
+        now = time.time()
+        for item in items:
+            family = item["family"]
+            count = item["count"]
+            reason = item["reason"]
+            batch_key = f"{family}_{reason}"
+            self.recent_endgame_spoken[batch_key] = now
+
+            if self.lang == "es":
+                salvo_txt = f"Salva de {count} misiles {family}" if count > 1 else f"Misil {family}"
+                if reason == "BLIND":
+                    dp = f"⚠️ [GUIADO PERDIDO]: {salvo_txt} perdido por falta de radar."
+                    sp = f"Telemetría de guiado: {salvo_txt} perdido por pérdida de radar."
+                elif reason == "OUT_OF_ENERGY":
+                    dp = f"⚠️ [ENERGÍA AGOTADA]: {salvo_txt} agotó energía cinética."
+                    sp = f"Telemetría: {salvo_txt} agotó energía cinética fuera de envolvente."
+                elif reason == "MALFUNCTION":
+                    dp = f"⚠️ [FALLO EN VUELO]: {salvo_txt} avería técnica."
+                    sp = f"Telemetría: {salvo_txt} sufrió fallo técnico en vuelo."
+                else:
+                    dp = f"⚠️ [TIRO FALLIDO]: {salvo_txt} intercepción fallida."
+                    sp = f"Telemetría: {salvo_txt} intercepción fallida."
+            else:
+                salvo_txt = f"Salvo of {count} {family} missiles" if count > 1 else f"{family} missile"
+                if reason == "BLIND":
+                    dp = f"⚠️ [GUIDANCE LOST]: {salvo_txt} lost radar guidance."
+                    sp = f"Guidance telemetry: {salvo_txt} lost due to lack of radar guidance."
+                elif reason == "OUT_OF_ENERGY":
+                    dp = f"⚠️ [OUT OF ENERGY]: {salvo_txt} depleted kinetic energy."
+                    sp = f"Telemetry: {salvo_txt} ran out of kinetic energy."
+                elif reason == "MALFUNCTION":
+                    dp = f"⚠️ [MALFUNCTION]: {salvo_txt} technical failure."
+                    sp = f"Telemetry: {salvo_txt} suffered in-flight technical malfunction."
+                else:
+                    dp = f"⚠️ [MISSED]: {salvo_txt} intercept missed."
+                    sp = f"Telemetry: {salvo_txt} failed to intercept."
+
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="AIR",
+                text_display=dp,
+                text_speech=sp,
+                ttl_seconds=12.0
             ))
 
     def preload_voices(self):
@@ -652,6 +998,17 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_timestamp_prefix = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
     re_vampire = re.compile(r"(?:VAMPIRE|Missile inbound).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
     re_torpedo = re.compile(r"Torpedo\s*(?:inbound|detected).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
+    re_new_contact = re.compile(
+        r"New contact!\s*Designated\s*([^-\n]+?)(?:\s*-\s*Detected by\s*(.+?))?(?:\s+at\s+(\d+)deg)?(?:\s*-\s*(?:Estimated\s*)?([\d,\.]+\s*nm))?\s*$",
+        re.IGNORECASE
+    )
+    re_incoming_attack = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+is attacking\s+(.+?)(?:\s+with|\s*\.\s*|\s*,\s*|$)", re.IGNORECASE)
+    re_radar_illum = re.compile(r"(?:Guidance illumination detected|Radar lock detected)", re.IGNORECASE)
+    re_critical_subsystem = re.compile(r"(Cockpit & crew incapacitated|Cockpit hit|Rudder jammed|Fire in|Flooding in)", re.IGNORECASE)
+    re_endgame_blind = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+is running blind for more than \d+ sec", re.IGNORECASE)
+    re_endgame_energy = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+MISS:\s*Has run out of energy", re.IGNORECASE)
+    re_endgame_overshoot = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+overshot its target", re.IGNORECASE)
+    re_endgame_malfunction = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+MISS:\s*Has malfunctioned", re.IGNORECASE)
     re_classified = re.compile(
         r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*(.+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?(?:\s*\(Classification by:.*?\))?$",
         re.IGNORECASE
@@ -739,6 +1096,46 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         if not line:
                             continue
 
+                        # A. Alerta RWR / Radar Lock
+                        if re_radar_illum.search(line):
+                            advisor.notify_radar_warning()
+
+                        # B. Amenaza entrante (Misil atacando buque/aeronave aliada)
+                        m_atk = re_incoming_attack.search(line)
+                        if m_atk:
+                            advisor.notify_incoming_threat(weapon=m_atk.group(1).strip(), target=m_atk.group(2).strip())
+
+                        # C. Control de averias criticas
+                        m_subsys = re_critical_subsystem.search(line)
+                        if m_subsys:
+                            advisor.notify_subsystem_damage(unit=line_side or "Unidad", desc=m_subsys.group(1).strip())
+
+                        # D. Telemetria de endgame
+                        m_blind = re_endgame_blind.search(line)
+                        if m_blind:
+                            advisor.notify_missile_endgame(m_blind.group(1).strip(), "BLIND")
+                            continue
+                        m_energy = re_endgame_energy.search(line)
+                        if m_energy:
+                            advisor.notify_missile_endgame(m_energy.group(1).strip(), "OUT_OF_ENERGY")
+                            continue
+                        m_malf = re_endgame_malfunction.search(line)
+                        if m_malf:
+                            advisor.notify_missile_endgame(m_malf.group(1).strip(), "MALFUNCTION")
+                            continue
+
+                        # E. Deteccion de Nuevo Contacto con marcacion y distancia en millas
+                        m_new = re_new_contact.search(line)
+                        if m_new:
+                            c_id = m_new.group(1).strip()
+                            det_raw = m_new.group(2).strip() if m_new.group(2) else ""
+                            b_deg = float(m_new.group(3)) if m_new.group(3) else None
+                            d_raw = m_new.group(4).strip() if m_new.group(4) else None
+                            c_up = c_id.upper()
+                            domain = "SURFACE" if "SKUNK" in c_up else ("SUB" if "GOBLIN" in c_up else "AIR")
+                            advisor.notify_contact(contact_id=c_id, domain=domain, name=c_id, bearing=b_deg, distance=d_raw, detector=det_raw)
+                            continue
+
                         # 1. Vampire / Missile Inbound (Only against player/allies!)
                         m_vamp = re_vampire.search(line)
                         if m_vamp:
@@ -798,25 +1195,29 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             clean_target = PhoneticHelper.clean_name(raw_unit)
                             if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
                                 is_sunk = "sunk" in line.lower()
-                                domain = "SUB" if is_sunk else "BDA"
-
-                                if lang == "es":
-                                    verb = "hundido" if is_sunk else "destruido"
-                                    sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
-                                    dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
+                                # Si la unidad pertenecia al bando del jugador o aliado -> BAJA ALIADA
+                                if is_player_side(line_side, advisor.player_side):
+                                    advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
                                 else:
-                                    verb = "sunk" if is_sunk else "destroyed"
-                                    sp = f"Splash confirmed! Target {clean_target} {verb}."
-                                    dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
+                                    # Unidad hostil destruida -> KILL CONFIRMADO
+                                    domain = "SUB" if is_sunk else "BDA"
+                                    if lang == "es":
+                                        verb = "hundido" if is_sunk else "destruido"
+                                        sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
+                                        dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
+                                    else:
+                                        verb = "sunk" if is_sunk else "destroyed"
+                                        sp = f"Splash confirmed! Target {clean_target} {verb}."
+                                        dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
 
-                                advisor.alert_queue.put(VoiceAlert(
-                                    priority=PRIORITY_HIGH,
-                                    timestamp=time.time(),
-                                    domain=domain,
-                                    text_display=dp,
-                                    text_speech=sp,
-                                    ttl_seconds=15.0
-                                ))
+                                    advisor.alert_queue.put(VoiceAlert(
+                                        priority=PRIORITY_HIGH,
+                                        timestamp=time.time(),
+                                        domain=domain,
+                                        text_display=dp,
+                                        text_speech=sp,
+                                        ttl_seconds=15.0
+                                    ))
                             continue
 
                         # 4. Weapon Hit
@@ -1006,10 +1407,55 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
         advisor.running = False
 
 
+
+def run_test_suite(lang: str = "es"):
+    """Ejecuta una bateria de pruebas sinteticas para verificar todos los canales de voz."""
+    print("=" * 70)
+    print(f"🧪 INICIANDO TEST SUITE DE PRUEBAS TÁCTICAS (v{__version__} - {lang.upper()})")
+    print("=" * 70)
+    advisor = CmoTacticalVoiceAdvisor(lang=lang, debug=True)
+    advisor.player_side = "United States"
+    advisor.start()
+
+    events = [
+        ("AIR", "Detección radar inicial",
+         lambda: advisor.notify_contact("BOGEY #12", "AIR", "BOGEY #12", bearing=245.0, distance="32.4 nm", detector="DLG 31 Sterett")),
+        ("INTEL", "Alerta RWR",
+         lambda: advisor.notify_radar_warning()),
+        ("CRITICAL", "Ataque entrante",
+         lambda: advisor.notify_incoming_threat("SS-N-2c Styx", "DLG 31 Sterett")),
+        ("CRITICAL", "Alarma Vampire",
+         lambda: advisor.alert_queue.put(VoiceAlert(
+             priority=PRIORITY_CRITICAL, timestamp=time.time(), domain="CRITICAL",
+             text_display="ALERTA VAMPIRE: Misil entrante al 045." if lang == "es" else "VAMPIRE: Inbound missile bearing 045.",
+             text_speech="¡Alerta Vampire! ¡Misil antibuque entrante con marcación 045!" if lang == "es" else "Warning: Vampire! Inbound missile bearing 045!",
+             ttl_seconds=14.0, interrupt_current=True, is_radio=True))),
+        ("AIR", "Telemetría balística",
+         lambda: advisor.notify_missile_endgame("RIM-66A Standard SM-1MR", "OUT_OF_ENERGY")),
+        ("BDA", "Impacto y Derribo hostil",
+         lambda: advisor.alert_queue.put(VoiceAlert(
+             priority=PRIORITY_HIGH, timestamp=time.time(), domain="BDA",
+             text_display="KILL CONFIRMADO: Blanco Yak-38 destruido." if lang == "es" else "SPLASH CONFIRMED: Target Yak-38 destroyed.",
+             text_speech="¡Impacto definitivo confirmado! Blanco Yak-38 destruido." if lang == "es" else "Splash confirmed! Target Yak-38 destroyed.",
+             ttl_seconds=15.0)))
+    ]
+
+    for domain, label, trigger in events:
+        print(f"\n▶ Probando canal: {label}...")
+        trigger()
+        time.sleep(4.5)
+
+    print("\n✅ Test suite finalizado con éxito.")
+    advisor.running = False
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"CMO Tactical Voice Advisor v{__version__}")
     parser.add_argument("--lang", choices=["es", "en"], default="es", help="Language: 'es' (Spanish) or 'en' (English)")
     parser.add_argument("--side", type=str, default="", help="Force player operational side (e.g. USN, NATO, Blue)")
+    parser.add_argument("--test", action="store_true", help="Run simulated tactical audio test suite")
     args = parser.parse_args()
 
-    run_tactical_voice(lang=args.lang, side_override=args.side)
+    if args.test:
+        run_test_suite(lang=args.lang)
+    else:
+        run_tactical_voice(lang=args.lang, side_override=args.side)
