@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.tmp
+
+# Piper voice models (downloaded on demand to keep repo < 1 MB)
+voices/
+
+# Runtime caches and state
+.audio_cache/
+cmo_path.txt
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

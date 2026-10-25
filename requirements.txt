@@ -1,0 +1,6 @@
+# CMO Tactical Voice Advisor - Dependencies
+# Version: 1.2.0
+
+piper-tts>=1.2.0
+numpy>=1.22.0
+pedalboard>=0.8.0
