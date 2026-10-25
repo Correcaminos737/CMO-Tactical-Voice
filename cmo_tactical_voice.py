@@ -293,8 +293,9 @@ class CmoTacticalVoiceAdvisor:
         self._piper_cache: Dict[str, Any] = {}
         self.player_side: Optional[str] = None
         self.known_contacts: set = set()
-        self.is_baseline_sync = True
+        self.is_baseline_sync = False
         self.baseline_start_time = 0.0
+        self.baseline_contacts_count = 0
 
         # Departure Section / Strike Package Batching
         self.departure_buffer: Dict[str, List[Dict[str, Any]]] = {}
@@ -632,6 +633,10 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
     current_log = active_log
     file_pos = os.path.getsize(current_log) if current_log and os.path.exists(current_log) else 0
+    if file_pos == 0:
+        advisor.is_baseline_sync = True
+        advisor.baseline_start_time = time.time()
+        advisor.baseline_contacts_count = 0
 
     if side_override:
         advisor.player_side = side_override.strip()
@@ -670,9 +675,35 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                 file_pos = 0
                 if not side_override:
                     advisor.player_side = detect_player_side(current_log)
+                advisor.is_baseline_sync = True
+                advisor.baseline_start_time = time.time()
+                advisor.baseline_contacts_count = 0
+                advisor.known_contacts.clear()
+
+            # Baseline absorption phase completion check
+            if advisor.is_baseline_sync and (time.time() - advisor.baseline_start_time) > 4.5:
+                advisor.is_baseline_sync = False
+                if advisor.baseline_contacts_count > 0:
+                    if lang == "es":
+                        b_dsp = f"LÍNEA BASE DEL TEATRO: {advisor.baseline_contacts_count} trazas registradas en sector."
+                        b_sp = f"Línea base establecida: {advisor.baseline_contacts_count} trazas registradas en el sector. A la escucha de nuevas amenazas."
+                    else:
+                        b_dsp = f"THEATER BASELINE: {advisor.baseline_contacts_count} tracks registered in sector."
+                        b_sp = f"Theater baseline established: {advisor.baseline_contacts_count} tracks registered in sector. Standing by for new threats."
+
+                    advisor.alert_queue.put(VoiceAlert(
+                        priority=PRIORITY_NORMAL,
+                        timestamp=time.time(),
+                        domain="AIR",
+                        text_display=b_dsp,
+                        text_speech=b_sp,
+                        ttl_seconds=15.0
+                    ))
 
             if current_log and os.path.exists(current_log):
                 curr_size = os.path.getsize(current_log)
+                if curr_size < file_pos:
+                    file_pos = 0
                 if curr_size > file_pos:
                     with open(current_log, "r", encoding="utf-8", errors="ignore") as f:
                         f.seek(file_pos)
@@ -825,6 +856,11 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             if c_key in advisor.known_contacts:
                                 continue
                             advisor.known_contacts.add(c_key)
+
+                            # If in initial baseline sync (scenario start), absorb silently
+                            if advisor.is_baseline_sync:
+                                advisor.baseline_contacts_count += 1
+                                continue
 
                             domain = "AIR" if any(a in c_type.upper() for a in ("FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT")) else "SURFACE"
 
