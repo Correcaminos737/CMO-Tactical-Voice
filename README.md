@@ -40,6 +40,14 @@
 
 ---
 
+### 🎛️ Total Customization: Control What the Voices Say!
+You have 100% control over which tactical events are narrated without touching a single line of code:
+- **Test with everything active:** When trying out the advisor, go to CMO **Game Options** ➔ **Message Log** and check all event types to experience the full immersion of an authentic military operations room.
+- **Tailor to your taste:** If you only want critical combat alerts (Missiles, Torpedoes, BDA, Splashes) and prefer not to hear routine flight takeoffs or contact detections, simply **uncheck** those categories in CMO's Message Log tab.
+- The advisor only narrates what you choose to log in CMO!
+
+---
+
 ### Voice Cast
 
 | Operational Role | English Watch Officer | Spanish Watch Officer |
@@ -78,6 +86,14 @@
    - Haz doble clic en **`INICIAR_VOZ_ESPANOL.bat`** (o `START_VOICE_ENGLISH.bat` para inglés).
    - En el primer arranque, descargará automáticamente las voces oficiales de Piper (~180 MB) desde Hugging Face.
    - ¡Despausa tu escenario en CMO y disfruta de la inmersión militar!
+
+---
+
+### 🎛️ Personalización Total: ¡Tú Decides Qué Quieres Escuchar!
+Tienes control absoluto sobre qué avisos canta la radio militar sin tener que tocar código:
+- **Prueba marcándolo todo:** Para tus primeras partidas de prueba, entra en CMO a **Game Options** ➔ pestaña **Message Log** y marca todas las categorías de eventos para vivir la experiencia inmersiva completa de una Sala de Operaciones táctica.
+- **Filtra a tu gusto:** Si más adelante prefieres una radio más silenciosa centrada solo en combate crítico (Vampires, Torpedos, BDA y Derribos) y no quieres avisos rutinarios de despegues o contactos, simplemente **desmarca** esas casillas en el Message Log de CMO.
+- ¡El Asesor solo narrará lo que tú decidas tener activado en tu simulador!
 
 ---
 

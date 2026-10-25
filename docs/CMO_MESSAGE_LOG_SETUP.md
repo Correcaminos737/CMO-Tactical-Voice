@@ -41,6 +41,14 @@ Para que el Asesor Táctico por Voz pueda narrar el combate en tiempo real, CMO 
   +-------------------------------------------------------+
 ```
 
-That's it! When you start any scenario, CMO will automatically create a `.txt` log file in your `Logs/` folder, and the Tactical Voice Advisor will immediately begin narrating.
+---
 
-¡Listo! Cuando inicies cualquier escenario, CMO creará automáticamente un archivo de texto en tu carpeta `Logs/` y el Asesor Táctico comenzará a hablar de inmediato.
+### 🎛️ How to Customize Voice Alerts / Cómo Personalizar los Avisos
+
+- **For Full Immersion Testing:** Check all message types in CMO's Message Log to hear everything (Takeoffs, Contacts, Weapon Hits, BDA, Alarms).
+- **For a Quieter / Combat-Only Radio:** Uncheck routine categories (such as non-critical contacts or routine air ops) and leave only Combat / Endgame events checked.
+- **The Voice Advisor only reads what CMO writes:** You have 100% control over the verbosity directly from CMO!
+
+- **Para Pruebas Inmersivas Completas:** Marca todas las categorías en el Message Log de CMO para escuchar toda la actividad táctica (Despegues, Contactos, Impactos de armas, BDA, Alarmas).
+- **Para una Radio Más Silenciosa / Solo Combate:** Desmarca categorías rutinarias y deja marcados únicamente los eventos de combate crítico.
+- **El Asesor solo narra lo que CMO escribe:** ¡Tienes control total del nivel de avisos desde el propio juego!
