@@ -970,8 +970,9 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
     banner_lang = "ESPAÑOL" if lang == "es" else "ENGLISH"
     print("=" * 70)
-    print(f"🎙️  CMO TACTICAL VOICE ADVISOR - v{__version__} (Community Edition)")
-    print(f"🎖️  IDIOMA / LANGUAGE: {banner_lang} | AUTOR: Correcaminos")
+    print("🎙️  CMO TACTICAL VOICE ADVISOR - (Community Edition)")
+    print("🎖️  Author: Correcaminos / CMO War Room Community")
+    print(f"🌐  Language / Idioma: {banner_lang}")
     print("=" * 70)
 
     # 1. Ensure voice models are ready
@@ -1497,7 +1498,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 def run_test_suite(lang: str = "es"):
     """Ejecuta una bateria de pruebas sinteticas para verificar todos los canales de voz."""
     print("=" * 70)
-    print(f"🧪 INICIANDO TEST SUITE DE PRUEBAS TÁCTICAS (v{__version__} - {lang.upper()})")
+    print(f"🧪 INICIANDO TEST SUITE DE PRUEBAS TÁCTICAS ({lang.upper()})")
     print("=" * 70)
     advisor = CmoTacticalVoiceAdvisor(lang=lang, debug=True)
     advisor.player_side = "United States"
