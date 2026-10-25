@@ -1,6 +1,6 @@
 # CMO Tactical Voice Advisor 🎙️
 ### Real-Time Neural Voice Advisory for Command: Modern Operations (CMO)
-**Version:** 1.2.0 (Community Edition)  
+**Version:** (Community Edition)  
 **Author:** Correcaminos (Author of *Operation Absolute Resolve*, *The Hormuz Gauntlet* , and other CMO scenarios)
 **Platform:** Windows 10 / 11 (64-bit)  
 **License:** Community Non-Commercial & Attribution 
