@@ -652,7 +652,10 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_timestamp_prefix = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
     re_vampire = re.compile(r"(?:VAMPIRE|Missile inbound).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
     re_torpedo = re.compile(r"Torpedo\s*(?:inbound|detected).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
-    re_classified = re.compile(r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*([^:\n]+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?", re.IGNORECASE)
+    re_classified = re.compile(
+        r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*(.+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?(?:\s*\(Classification by:.*?\))?$",
+        re.IGNORECASE
+    )
     re_hit = re.compile(r"Weapon:\s*([^:\n]+?)\s*(?:has impacted|has detonated near)\s*([^:\(\n]+)", re.IGNORECASE)
     re_destroyed = re.compile(r"(?:Unit:\s*)?([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+has (?:been destroyed|sunk|run out of fuel and crashed)", re.IGNORECASE)
     re_bingo = re.compile(r"Unit:\s*([^:\n]+?)\s*is BINGO FUEL", re.IGNORECASE)
@@ -841,15 +844,24 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                             ))
                             continue
 
-                        # 5. Contact Classification
+                        # 5. Contact Classification (Only player/allied detections!)
                         m_class = re_classified.search(line)
                         if m_class:
+                            if not is_player_side(line_side, advisor.player_side):
+                                continue
+
                             c_id = m_class.group(1).strip()
-                            c_type = m_class.group(2).strip()
+                            raw_type = m_class.group(2).strip()
                             c_host = m_class.group(3).strip() if m_class.group(3) else "Hostile"
+                            c_type = PhoneticHelper.clean_name(raw_type)
+
+                            if not c_type or len(c_type) <= 1:
+                                continue
+
+                            c_type_up = c_type.upper()
 
                             # Skip civilian traffic
-                            if any(k in c_type.upper() for k in CIVILIAN_KEYWORDS):
+                            if any(k in c_type_up for k in CIVILIAN_KEYWORDS):
                                 continue
 
                             c_key = f"{c_id}:{c_type}"
@@ -862,7 +874,13 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                 advisor.baseline_contacts_count += 1
                                 continue
 
-                            domain = "AIR" if any(a in c_type.upper() for a in ("FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT")) else "SURFACE"
+                            c_id_up = c_id.upper()
+                            if c_id_up.startswith("BOGEY") or any(a in c_type_up for a in ("FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT", "YAK", "MIG", "SU-", "F-", "FORGER", "MULTIROLE", "HELICOPTER")):
+                                domain = "AIR"
+                            elif c_id_up.startswith("GOBLIN") or any(s in c_type_up for s in ("SUB", "SSN", "SSK", "SUBMARINE")):
+                                domain = "SUB"
+                            else:
+                                domain = "SURFACE"
 
                             if lang == "es":
                                 sp = f"Contacto {c_id} identificado positivamente como {c_type}."
