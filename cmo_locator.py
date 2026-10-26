@@ -100,6 +100,15 @@ def detect_cmo_logs_dir(custom_path_override: Optional[str] = None) -> Optional[
         except Exception:
             pass
 
+    # 1c. Check if placed directly inside CMO root directory (e.g. Command - Modern Operations/CMO-Tactical-Voice)
+    parent_logs = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "Logs"))
+    if os.path.exists(parent_logs) and os.path.isdir(parent_logs):
+        return parent_logs
+
+    local_logs = os.path.normpath(os.path.join(os.path.dirname(__file__), "Logs"))
+    if os.path.exists(local_logs) and os.path.isdir(local_logs):
+        return local_logs
+
     candidates = []
 
     # 2. Check Steam libraries

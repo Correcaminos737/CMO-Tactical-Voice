@@ -5,42 +5,43 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
-## [1.2.11] - 2026-10-25
+## [1.2.11] - 2026-10-26
 
-### 🛡️ Critical Bug Fixes & Combat Polish / Correcciones Críticas y Pulido de Combate
-- **Filtro Estricto de Niebla de Guerra / Strict Fog of War Isolation:**
-  - Corregida la fuga de inteligencia táctica y telemetría enemiga. El asesor ahora descarta al 100% cualquier línea que pertenezca explícitamente a un bando contrario al inicio del procesamiento (evitando por ejemplo que un jugador del Pacto de Varsovia escuche las detecciones de submarinos de la OTAN como *S 66 Greif* o *S 320 Narhvalen*, o fallos de misiles Exocet enemigos).
-  - Blindada la función de comprobación de bandos para evitar colisiones accidentales de acrónimos (como `US` coincidiendo dentro de `USSR`).
-- **Discriminación IFF en Ataques Balísticos / Combat IFF Discrimination:**
-  - Los misiles lanzados por el jugador o sus aliados contra blancos enemigos (como *AIM-120 AMRAAM* atacando a un *MiG-23* o *MiG-25*) ahora se anuncian como telemetría ofensiva profesional (`🚀 [ENGAGEMENT]`), eliminando las falsas alarmas que ordenaban al jugador activar contramedidas contra sus propios misiles.
-  - Las armas hostiles que amenacen a buques o aeronaves aliadas mantienen la alarma crítica de combate (`🚨 [CRÍTICO] ⚠️ [AMENAZA ENTRANTE]`).
-- **Resolución de Dominio de Bombarderos y Prefijos Aéreos / Aircraft Domain Resolution:**
-  - Corregido el reconocimiento aéreo para que bombarderos estratégicos (como *H-6M Badger*, *Tu-95 Bear*, etc.) y contactos bautizados como `Bomber #`, `Fighter #`, `AEW #`, `OECM #` o `Multirole #` reciban el icono aéreo (`✈️`) y la voz del Oficial de Operaciones Aéreas (Karpov) en lugar de ser tratados como buques de superficie.
-- **Filtro de Cañoneo Naval y Reportes de Averías / Naval Gunfire & Subsystem Filter:**
-  - Los avisos de averías internas de buques (`damage report: ... has been destroyed`) ahora se ignoran estrictamente para los Kills. El asesor ya no cantará montajes de 14.5mm, radios UHF, periscopios o tubos de torpedos de 450mm como si fueran buques enteros destruidos.
-  - Las ráfagas rápidas de artillería naval (cañones de 127mm o 76mm en duelos contra lanchas torpederas Swatow o P-4) se agrupan con un enfriamiento de 30 segundos (`⚔️ [ARTILLERÍA] / [GUNFIRE]`) para evitar saturación en combates a corta distancia.
-- **Filtro de Tráfico Aéreo Comercial Neutral / Neutral Airliner Filter:**
-  - Ampliadas las palabras clave para que los aviones civiles de pasajeros de aerolíneas neutrales (*Boeing 777*, *Boeing 737*, *ATR-42*, *Cessna Citation*) no saturen las comunicaciones de combate.
-- **Cabecera de Consola Limpia:**
-  - Eliminado el número de versión visual del banner de inicio para un acabado profesional y atemporal.
+### 🚀 Facilidad de Instalación, Auto-Detección y Kills Confirmados / Installation & Detection Polish
+- **Auto-Detección Relativa en Carpeta de CMO / Root Folder Discovery:**
+  - `cmo_locator.py` ahora comprueba si la carpeta del asesor está descomprimida directamente dentro de la instalación de Command: Modern Operations (`..\Logs`), garantizando enlace instantáneo sin configuración para cualquier instalación en discos secundarios o rutas personalizadas.
+- **Soporte Completo en Inglés / Dedicated English Installer:**
+  - Añadido `INSTALL_DEPENDENCIES.bat` en inglés junto a `INSTALAR_DEPENDENCIAS.bat`.
+  - Los scripts `.bat` ahora detectan tanto `python` como el launcher oficial `py -3` de Windows, ofreciendo mensajes de error limpios y enlaces de ayuda si Python no está presente.
+- **Reordenamiento de Kills y Niebla de Guerra / Enemy Splashes vs Fog of War:**
+  - El evaluador de bajas enemigas ahora se procesa antes de aislar la telemetría hostil. CMO etiqueta los derribos enemigos bajo el bando de la víctima (`[Russia] ... destroyed!`), por lo que ahora los derribos y buques hundidos se anuncian inmediatamente como Kills confirmados antes de bloquear los radares y sensores enemigos.
+- **Instrucciones Claras en README y Foro:**
+  - Clarificado que el asesor funciona como una Consola de Radio Táctica ultraligera en segundo plano (terminal sin GUI pesada) y simplificada la guía de instalación a 3 pasos directos.
 
 ---
 
 ## [1.2.1] - 2026-10-25
-- Paridad con War Room: restauración de marcaciones y distancias en millas náuticas (`re_new_contact`).
-- Filtro militar anti-saturación de paquetes aéreos.
-- Alertas de amenazas entrantes (`re_incoming_attack`) y RWR de radar lock (`re_radar_illum`).
-- Diferenciación de bajas aliadas vs kills/splashes enemigos.
-- Telemetría balística de salvas y endgame (agotamiento de energía, pérdida de radar, averías).
-- Control de daños y averías críticas (incendios, timón averiado, inundaciones).
-- Soporte de bando 100% universal para cualquier país del mundo sin restricciones.
-- Modo de prueba táctica integrado (`--test`).
 
----
-
-## [1.2.0] - 2026-10-25
-- Lanzamiento inicial independiente para la comunidad con soporte de voces locales neuronales Piper (Español e Inglés).
-- Localizador automático de carpetas de logs de CMO (`cmo_locator.py`).
-- Descargador automático de modelos ONNX (`voice_downloader.py`).
-- Filtro de despegues por secciones aéreas y portaviones.
-- Avisos de BDA, Bingo fuel y alertas críticas Vampire/Torpedo.
+### 🛡️ Optimización de Voz, Supresión de AAA y Debounce / Combat Audio Polish
+- **Supresión de Spam de AAA, Balas y Proyectiles:**
+  - Se eliminan por completo los avisos continuos de ráfagas de ametralladoras, cañones y proyectiles antiaéreos (AAA de 12.7mm, 23mm, 37mm, 57mm, Vulcan, etc.). No más interrupciones repetitivas ni falsos positivos de "fuego naval" sobre tierra.
+  - La confirmación de derribos e impactos definitivos (Kills/Splashes y Bajas Aliadas) se mantiene intacta al 100%.
+  - Las alertas críticas de misiles guiados (SAM, AAM, Vampire, Torpedo) y RWR continúan teniendo prioridad inmediata.
+- **Deduplicación y Filtro Anti-Rebote (Debounce Multi-Bando):**
+  - Incorporada caché de supresión de duplicados: 30 segundos en bajas aliadas, 20 segundos en derribos de blancos hostiles y 15 segundos en informes BDA.
+  - Evita que un avión derribado se cante dos o tres veces consecutivas cuando CMO registra el evento bajo varios bandos (`[USN]`, `[USAF]`, `[Downed Pilots]`).
+- **Corrección de Identificación de Cazas (Regex Word Boundaries):**
+  - Blindada la clasificación de aeronaves con límites de palabra (`\b`) en `clean_unit_callsign`.
+  - Resuelto el error donde escuadrones navales históricos como `VF-154` eran interpretados erróneamente como cazas `F-15`. Ahora se traducen limpiamente como `Phantom 5`, `Skyhawk`, `Thunderchief`, etc.
+- **Filtro Estricto de Niebla de Guerra / Strict Fog of War Isolation:**
+  - Corregida la fuga de inteligencia táctica y telemetría enemiga. El asesor ahora descarta al 100% cualquier línea que pertenezca explícitamente a un bando contrario al inicio del procesamiento.
+- **Discriminación IFF en Ataques Balísticos / Combat IFF Discrimination:**
+  - Los misiles lanzados por el jugador o sus aliados contra blancos enemigos ahora se anuncian como telemetría ofensiva profesional (`🚀 [ENGAGEMENT]`), eliminando las falsas alarmas que ordenaban al jugador activar contramedidas contra sus propios misiles.
+- **Resolución de Dominio de Bombarderos y Prefijos Aéreos / Aircraft Domain Resolution:**
+  - Corregido el reconocimiento aéreo para bombarderos estratégicos y prefijos de misión.
+- **Filtro de Cañoneo Naval y Reportes de Averías / Naval Gunfire & Subsystem Filter:**
+  - Ignorados los reportes de averías internas de buques para no confundirlos con hundimientos, y throttled el fuego continuo de cañones.
+- **Filtro de Tráfico Aéreo Comercial Neutral / Neutral Airliner Filter:**
+  - Silenciados los aviones comerciales de pasajeros durante el combate.
+- **Cabecera de Consola Limpia:**
+  - Eliminado el número de versión visual del banner de inicio para un acabado profesional.

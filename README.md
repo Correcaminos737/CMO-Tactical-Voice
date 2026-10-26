@@ -26,17 +26,27 @@
 
 ---
 
-### Quick Start (3 Steps)
+### Prerequisites (Only if you don't have Python installed)
+- **Python 3** (Python 3.10, 3.11, or 3.12 recommended): [Official Download](https://www.python.org/downloads/)
+- ⚠️ **Important during Python installation:** On the very first screen of the installer, check the box at the bottom: **☑ "Add python.exe to PATH"** before clicking *Install Now*.
 
-1. **Enable Message Log in CMO:**
+---
+
+### Quick Start Guide (3 Simple Steps)
+
+1. **Requirements & Dependencies:**
+   - Extract the zip folder anywhere (or directly inside your `Command - Modern Operations` main folder).
+   - Double-click **`INSTALL_DEPENDENCIES.bat`** (only needed once, installs the AI voice engine).
+
+2. **Enable Message Log in CMO:**
    - In CMO: Go to **Game** ➔ **Game Options** ➔ **Message Log** tab.
    - Check `[X] Write message log to file`. ([Detailed Guide](docs/CMO_MESSAGE_LOG_SETUP.md)).
-2. **Install Dependencies (One-time):**
-   - Double-click `INSTALAR_DEPENDENCIAS.bat` (or run `pip install -r requirements.txt`).
-3. **Launch the Voice Advisor:**
+
+3. **Run the Advisor:**
    - Double-click **`START_VOICE_ENGLISH.bat`** (or `INICIAR_VOZ_ESPANOL.bat` for Spanish).
-   - On the very first run, it will automatically download the official Piper neural models (~180 MB) directly from Hugging Face.
-   - Start or unpause your CMO scenario and listen to your tactical crew!
+   - A black **Tactical Radio Console** window will open in the background (this is normal, it has no heavy graphical UI).
+   - On the first run, it will automatically download the official Piper neural models (~180 MB) from Hugging Face.
+   - Minimize the console, unpause your CMO scenario, and listen to your tactical crew!
 
 ---
 
@@ -97,17 +107,27 @@ To deliver an authentic military radio atmosphere without turning your speakers 
 
 ---
 
-### Inicio Rápido (3 Pasos)
+### Requisitos Previos (Solo si no tienes Python instalado)
+- **Python 3** (Recomendado Python 3.10, 3.11 o 3.12): [Descarga Oficial](https://www.python.org/downloads/)
+- ⚠️ **Importante durante la instalación:** En la primera pantalla del instalador, marca la casilla inferior: **☑ "Add python.exe to PATH"** antes de pulsar *Install Now*.
 
-1. **Activar el Message Log en CMO:**
+---
+
+### Inicio Rápido (3 Pasos Simples)
+
+1. **Descomprimir e Instalar Dependencias:**
+   - Descomprime el archivo zip donde prefieras (o directamente dentro de la carpeta de `Command - Modern Operations`).
+   - Haz doble clic en **`INSTALAR_DEPENDENCIAS.bat`** (o `INSTALL_DEPENDENCIES.bat`, solo la primera vez).
+
+2. **Activar el Message Log en CMO:**
    - En CMO: Ve a **Game** ➔ **Game Options** ➔ pestaña **Message Log**.
    - Marca la casilla `[X] Write message log to file`. ([Guía detallada](docs/CMO_MESSAGE_LOG_SETUP.md)).
-2. **Instalar Dependencias (Solo la primera vez):**
-   - Haz doble clic en `INSTALAR_DEPENDENCIAS.bat` (o escribe `pip install -r requirements.txt`).
+
 3. **Iniciar el Asesor de Voz:**
    - Haz doble clic en **`INICIAR_VOZ_ESPANOL.bat`** (o `START_VOICE_ENGLISH.bat` para inglés).
-   - En el primer arranque, descargará automáticamente las voces oficiales de Piper (~180 MB) desde Hugging Face.
-   - ¡Despausa tu escenario en CMO y disfruta de la inmersión militar!
+   - Se abrirá una ventana negra de **Consola de Radio Táctica** en segundo plano (sin interfaz gráfica pesada para no consumir recursos de tu GPU/RAM).
+   - En el primer arranque descargará automáticamente los modelos oficiales de voz Piper (~180 MB) desde Hugging Face.
+   - Minimiza la ventana, despausa tu partida en CMO y ¡buena caza!
 
 ---
 

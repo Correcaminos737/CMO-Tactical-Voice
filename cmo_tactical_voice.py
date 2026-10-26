@@ -34,7 +34,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from cmo_locator import detect_cmo_logs_dir, save_cmo_path
 from voice_downloader import ensure_voices_available
 
-__version__ = "1.2.11"
+__version__ = "1.2.1"
 
 # =============================================================================
 # 1. VOICE CONFIGURATION & CATALOG
@@ -226,40 +226,48 @@ class PhoneticHelper:
         num_str = f" {m_num.group(1)}" if m_num else ""
 
         m_up = (model + " " + text).upper()
-        if "HORNET" in m_up or "F/A-18" in m_up or "F-18" in m_up:
+        if re.search(r'\b(HORNET|F/A-18[A-F]?|F-18[A-F]?)\b', m_up):
             base_name = f"Hornet{num_str}"
-        elif "TOMCAT" in m_up or "F-14" in m_up:
+        elif re.search(r'\b(TOMCAT|F-14[A-D]?)\b', m_up):
             base_name = f"Tomcat{num_str}"
-        elif "EAGLE" in m_up or "F-15" in m_up:
+        elif re.search(r'\b(EAGLE|STRIKE\s+EAGLE|F-15[A-EX]?)\b', m_up):
             base_name = f"F-15{num_str}"
-        elif "VIPER" in m_up or "F-16" in m_up or "FALCON" in m_up:
+        elif re.search(r'\b(VIPER|FALCON|F-16[A-D]?)\b', m_up):
             base_name = f"F-16{num_str}"
-        elif "LIGHTNING" in m_up or "F-35" in m_up:
+        elif re.search(r'\b(LIGHTNING|F-35[A-C]?)\b', m_up):
             base_name = f"F-35{num_str}"
-        elif "RAPTOR" in m_up or "F-22" in m_up:
+        elif re.search(r'\b(RAPTOR|F-22[A]?)\b', m_up):
             base_name = f"F-22{num_str}"
-        elif "TYPHOON" in m_up or "EUROFIGHTER" in m_up:
+        elif re.search(r'\b(TYPHOON|EUROFIGHTER)\b', m_up):
             base_name = f"Eurofighter{num_str}"
-        elif "RAFALE" in m_up:
+        elif re.search(r'\bRAFALE\b', m_up):
             base_name = f"Rafale{num_str}"
-        elif "HARRIER" in m_up or "AV-8" in m_up:
+        elif re.search(r'\b(HARRIER|AV-8[A-B]?)\b', m_up):
             base_name = f"Harrier{num_str}"
-        elif "HAWKEYE" in m_up or "E-2" in m_up:
+        elif re.search(r'\b(HAWKEYE|E-2[A-D]?)\b', m_up):
             base_name = f"Hawkeye{num_str}"
-        elif "SENTRY" in m_up or "E-3" in m_up:
+        elif re.search(r'\b(SENTRY|E-3[A-G]?)\b', m_up):
             base_name = f"AWACS Sentry{num_str}"
-        elif "PROWLER" in m_up or "EA-6" in m_up:
+        elif re.search(r'\b(PROWLER|EA-6[A-B]?)\b', m_up):
             base_name = f"Prowler{num_str}"
-        elif "GROWLER" in m_up or "EA-18" in m_up:
+        elif re.search(r'\b(GROWLER|EA-18[G]?)\b', m_up):
             base_name = f"Growler{num_str}"
-        elif "CORSAIR" in m_up or "A-7" in m_up:
+        elif re.search(r'\b(CORSAIR|A-7[A-E]?)\b', m_up):
             base_name = f"Corsair{num_str}"
-        elif "INTRUDER" in m_up or "A-6" in m_up:
+        elif re.search(r'\b(INTRUDER|A-6[A-E]?)\b', m_up):
             base_name = f"Intruder{num_str}"
-        elif "WARTHOG" in m_up or "A-10" in m_up:
+        elif re.search(r'\b(WARTHOG|A-10[A-C]?)\b', m_up):
             base_name = f"A-10{num_str}"
-        elif "PHANTOM" in m_up or "F-4" in m_up:
+        elif re.search(r'\b(PHANTOM|F-4[A-S]?)\b', m_up):
             base_name = f"Phantom{num_str}"
+        elif re.search(r'\b(THUNDERCHIEF|F-105[A-G]?)\b', m_up):
+            base_name = f"Thunderchief{num_str}"
+        elif re.search(r'\b(SKYHAWK|A-4[A-M]?)\b', m_up):
+            base_name = f"Skyhawk{num_str}"
+        elif re.search(r'\b(SKYWARRIOR|[A-Z]?A-3[A-B]?)\b', m_up):
+            base_name = f"Skywarrior{num_str}"
+        elif re.search(r'\b(VIGILANTE|RA-5[C]?)\b', m_up):
+            base_name = f"Vigilante{num_str}"
         elif model:
             base_name = f"{model}{num_str}"
         else:
@@ -332,7 +340,13 @@ class WeaponPhoneticHelper:
             category = "ROCKET"
         elif any(b in w_up for b in ("CBU-", "ROCKEYE", "MK20", "MK81", "MK82", "MK83", "MK84", "GBU-", "BOMB", "FAB-", "KAB-", "BETAB", "RBK-")):
             category = "BOMB"
-        elif any(g in w_up for g in ("76MM", "127MM", "5\"/54", "5\"/38", "3\"/50", "20MM", "23MM", "30MM", "GUN", "CANNON")):
+        elif any(g in w_up for g in (
+            "76MM", "127MM", "5\"/54", "5\"/38", "3\"/50", "20MM", "23MM", "30MM",
+            "12.7MM", "14.5MM", "37MM", "57MM", "85MM", "100MM", "130MM",
+            "GUN", "CANNON", "BURST", "AAA", "FLAK", "SHELL", "ARTILLERY",
+            "ZSU-", "DSHK", "ZPU-", "BOFORS", "PHALANX", "CIWS", "GOALKEEPER",
+            "AK-230", "AK-630", "GSH-", "NR-23", "NR-30", "VULCAN", "M61", "GAU-"
+        )):
             category = "GUN"
         else:
             category = "MISSILE"
@@ -372,6 +386,9 @@ class CmoTacticalVoiceAdvisor:
         self.recent_threats: Dict[str, float] = {}
         self.last_rwr_time: float = 0.0
         self.recent_damage: Dict[str, float] = {}
+        self.recent_losses: Dict[str, float] = {}
+        self.recent_kills: Dict[str, float] = {}
+        self.recent_bda: Dict[str, float] = {}
 
         # Endgame Salvo Batching
         self.endgame_salvo_buffer: Dict[str, Dict[str, Any]] = {}
@@ -559,6 +576,11 @@ class CmoTacticalVoiceAdvisor:
         w_up = weapon.upper()
         tgt_up = target.upper()
 
+        category, _ = WeaponPhoneticHelper.get_info(weapon)
+        # Silenciar proyectiles, ráfagas de balas y fuego de AAA para evitar saturación repetitiva
+        if category == "GUN":
+            return
+
         FRIENDLY_WEAPONS = (
             "AIM-120", "AMRAAM", "AIM-9", "SIDEWINDER", "AIM-7", "SPARROW", "AIM-54", "PHOENIX",
             "SM-1", "SM-2", "SM-3", "SM-6", "STANDARD", "ESSM", "SEASPARROW", "MIM-104", "PATRIOT",
@@ -663,6 +685,13 @@ class CmoTacticalVoiceAdvisor:
     def notify_friendly_loss(self, unit_name: str, reason: str = ""):
         now = time.time()
         c_unit = PhoneticHelper.clean_unit_callsign(unit_name)
+        if not c_unit:
+            c_unit = PhoneticHelper.clean_name(unit_name)
+
+        # Deduplicación y filtro anti-rebote (30 segundos por unidad):
+        if (now - self.recent_losses.get(c_unit, 0.0)) < 30.0:
+            return
+        self.recent_losses[c_unit] = now
         if self.lang == "es":
             dp = f"🚨 [BAJA ALIADA]: {c_unit} HA SIDO DESTRUIDO."
             sp = f"¡Atención sala de operaciones! ¡Baja aliada confirmada! {c_unit} ha sido destruido en combate."
@@ -1187,6 +1216,12 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                 if is_player_side(line_side, advisor.player_side):
                                     advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
                                 else:
+                                    # Deduplicación de derribo/destrucción enemiga (20 segundos por blanco)
+                                    now_k = time.time()
+                                    if (now_k - advisor.recent_kills.get(clean_target, 0.0)) < 20.0:
+                                        continue
+                                    advisor.recent_kills[clean_target] = now_k
+
                                     # Unidad hostil destruida -> KILL CONFIRMADO
                                     domain = "SUB" if is_sunk else "BDA"
                                     if lang == "es":
@@ -1488,6 +1523,13 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                 desc_es = re.sub(r'\bMinor fire\b', 'con fuego leve', desc_es, flags=re.IGNORECASE)
                                 desc_es = re.sub(r'\bMajor fire\b', 'con incendios graves', desc_es, flags=re.IGNORECASE)
                                 desc_es = re.sub(r'\bDestroyed\b', 'destruido', desc_es, flags=re.IGNORECASE)
+
+                                # Deduplicación de BDA para evitar múltiples avisos idénticos por salva
+                                now_bda = time.time()
+                                bda_key = f"{c_id}_{desc_es}"
+                                if (now_bda - advisor.recent_bda.get(bda_key, 0.0)) < 15.0:
+                                    continue
+                                advisor.recent_bda[bda_key] = now_bda
 
                                 if is_sub:
                                     sp = f"Informe de submarino {observer}: BDA en contacto {c_id}, {desc_es}."
