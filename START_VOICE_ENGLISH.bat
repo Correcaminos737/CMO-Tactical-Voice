@@ -23,13 +23,33 @@ powershell -NoProfile -Command "Get-CimInstance Win32_Process | Where-Object { $
 timeout /t 1 /nobreak >nul 2>&1
 
 set "PY_CMD="
+
+:: 1. Check if python is directly available in Windows PATH
 python --version >nul 2>&1
-if %ERRORLEVEL% EQU 0 (
-    set "PY_CMD=python"
-) else (
+if %ERRORLEVEL% EQU 0 set "PY_CMD=python"
+
+:: 2. Check if Python Launcher (py) is available
+if "%PY_CMD%"=="" (
     py -3 --version >nul 2>&1
-    if %ERRORLEVEL% EQU 0 (
-        set "PY_CMD=py -3"
+    if %ERRORLEVEL% EQU 0 set "PY_CMD=py -3"
+)
+
+:: 3. Check default user installation folder (AppData\Local\Programs\Python)
+if "%PY_CMD%"=="" (
+    for /d %%i in ("%LOCALAPPDATA%\Programs\Python\Python*") do (
+        if exist "%%i\python.exe" set "PY_CMD="%%i\python.exe""
+    )
+)
+
+:: 4. Check system Program Files
+if "%PY_CMD%"=="" (
+    for /d %%i in ("%ProgramFiles%\Python*") do (
+        if exist "%%i\python.exe" set "PY_CMD="%%i\python.exe""
+    )
+)
+if "%PY_CMD%"=="" (
+    for /d %%i in ("%ProgramFiles(x86)%\Python*") do (
+        if exist "%%i\python.exe" set "PY_CMD="%%i\python.exe""
     )
 )
 
