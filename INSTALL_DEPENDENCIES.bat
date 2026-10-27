@@ -52,8 +52,29 @@ if "%PY_CMD%"=="" (
 if "%PY_CMD%"=="" (
     echo [ERROR] Python was not found on your system!
     echo.
-    echo Please install Python 3 from: https://www.python.org/downloads/
+    echo Please download and install Python 3.12 (64-bit) from:
+    echo https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe
+    echo.
     echo Make sure to check the box: [X] "Add python.exe to PATH"
+    echo ======================================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+:: Verify Python version compatibility (Requires Python 3.10 - 3.12)
+%PY_CMD% -c "import sys; sys.exit(0 if (3, 9) <= sys.version_info < (3, 13) else 1)" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ======================================================================
+    echo [ERROR] Incompatible Python version detected!
+    echo.
+    echo The neural voice engine (Piper-TTS) requires Python 3.10, 3.11, or 3.12.
+    echo (Python 3.13+ is not yet supported by the voice phonemizer library).
+    echo.
+    echo Please install Python 3.12 using the direct official installer:
+    echo https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe
+    echo.
+    echo Remember to check: [X] "Add python.exe to PATH"
     echo ======================================================================
     echo.
     pause
@@ -71,7 +92,7 @@ if %ERRORLEVEL% EQU 0 (
     echo  You can now run START_VOICE_ENGLISH.bat
 ) else (
     echo  There was an issue installing dependencies.
-    echo  Please ensure you have internet access and Python installed.
+    echo  Please ensure you have internet access and Python 3.12 installed.
 )
 echo ======================================================================
 echo.

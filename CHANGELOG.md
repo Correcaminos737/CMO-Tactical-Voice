@@ -5,9 +5,12 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
-## [1.2.11] - 2026-10-26
+## [1.2.11] - 2026-10-27
 
 ### 🚀 Facilidad de Instalación, Auto-Detección y Kills Confirmados / Installation & Detection Polish
+- **Detección Automática de Python y Protección de Versión (Python 3.12):**
+  - Los lanzadores ahora buscan automáticamente Python en AppData (`%LOCALAPPDATA%\Programs\Python`) por si el usuario olvidó marcar la casilla del PATH.
+  - Añadida comprobación de compatibilidad que detecta Python 3.13+ y muestra un enlace directo oficial al instalador de Python 3.12 (evitando el error de falta de binarios de `piper-phonemize` en Python 3.13).
 - **Auto-Detección Relativa en Carpeta de CMO / Root Folder Discovery:**
   - `cmo_locator.py` ahora comprueba si la carpeta del asesor está descomprimida directamente dentro de la instalación de Command: Modern Operations (`..\Logs`), garantizando enlace instantáneo sin configuración para cualquier instalación en discos secundarios o rutas personalizadas.
 - **Soporte Completo en Inglés / Dedicated English Installer:**
@@ -16,7 +19,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Reordenamiento de Kills y Niebla de Guerra / Enemy Splashes vs Fog of War:**
   - El evaluador de bajas enemigas ahora se procesa antes de aislar la telemetría hostil. CMO etiqueta los derribos enemigos bajo el bando de la víctima (`[Russia] ... destroyed!`), por lo que ahora los derribos y buques hundidos se anuncian inmediatamente como Kills confirmados antes de bloquear los radares y sensores enemigos.
 - **Instrucciones Claras en README y Foro:**
-  - Clarificado que el asesor funciona como una Consola de Radio Táctica ultraligera en segundo plano (terminal sin GUI pesada) y simplificada la guía de instalación a 3 pasos directos.
+  - Clarificado que el asesor funciona como una Consola de Radio Táctica ultraligera en segundo plano (terminal sin GUI pesada) y simplificada la guía de instalación a 3 pasos directos con enlace directo a Python 3.12.
 
 ---
 

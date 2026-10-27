@@ -52,7 +52,28 @@ if "%PY_CMD%"=="" (
 if "%PY_CMD%"=="" (
     echo [ERROR] No se ha encontrado Python en el sistema.
     echo.
-    echo Por favor, instala Python 3 desde: https://www.python.org/downloads/
+    echo Por favor, descarga e instala Python 3.12 (64-bit) desde:
+    echo https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe
+    echo.
+    echo Recuerda marcar la casilla: [X] "Add python.exe to PATH"
+    echo ======================================================================
+    echo.
+    pause
+    exit /b 1
+)
+
+:: Comprobar versión compatible de Python (3.10 - 3.12)
+%PY_CMD% -c "import sys; sys.exit(0 if (3, 9) <= sys.version_info < (3, 13) else 1)" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ======================================================================
+    echo [ERROR] Version de Python no compatible detectada.
+    echo.
+    echo El motor de voz neuronal (Piper-TTS) requiere Python 3.10, 3.11 o 3.12.
+    echo (Python 3.13+ aun no dispone de librerias de fonemas precompiladas).
+    echo.
+    echo Por favor, instala Python 3.12 usando el instalador oficial directo:
+    echo https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe
+    echo.
     echo Recuerda marcar la casilla: [X] "Add python.exe to PATH"
     echo ======================================================================
     echo.
@@ -71,7 +92,7 @@ if %ERRORLEVEL% EQU 0 (
     echo  Ya puedes ejecutar INICIAR_VOZ_ESPANOL.bat o START_VOICE_ENGLISH.bat
 ) else (
     echo  Hubo un problema instalando las dependencias.
-    echo  Asegurate de tener conexion a internet y Python instalado.
+    echo  Asegurate de tener conexion a internet y Python 3.12 instalado.
 )
 echo ======================================================================
 echo.

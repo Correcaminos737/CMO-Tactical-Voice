@@ -27,7 +27,8 @@
 ---
 
 ### Prerequisites (Only if you don't have Python installed)
-- **Python 3** (Python 3.10, 3.11, or 3.12 recommended): [Official Download](https://www.python.org/downloads/)
+- **Python 3.12 (Recommended):** [Direct 64-bit Windows Installer](https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe)
+- ℹ️ *Note: Supports Python 3.10, 3.11, or 3.12. Python 3.13+ is not yet supported by the voice AI engine.*
 - ⚠️ **Important during Python installation:** On the very first screen of the installer, check the box at the bottom: **☑ "Add python.exe to PATH"** before clicking *Install Now*.
 
 ---
@@ -108,7 +109,8 @@ To deliver an authentic military radio atmosphere without turning your speakers 
 ---
 
 ### Requisitos Previos (Solo si no tienes Python instalado)
-- **Python 3** (Recomendado Python 3.10, 3.11 o 3.12): [Descarga Oficial](https://www.python.org/downloads/)
+- **Python 3.12 (Recomendado):** [Instalador Oficial Directo (Windows 64-bit)](https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe)
+- ℹ️ *Nota: Compatible con Python 3.10, 3.11 o 3.12. Python 3.13+ aún no dispone de librerías de voz compatibles.*
 - ⚠️ **Importante durante la instalación:** En la primera pantalla del instalador, marca la casilla inferior: **☑ "Add python.exe to PATH"** antes de pulsar *Install Now*.
 
 ---
