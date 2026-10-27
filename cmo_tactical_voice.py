@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 CMO Tactical Voice Advisor - Community Edition
-Version: 1.2.0
+Version: 1.2.13
 Author: Correcaminos & CMO War Room Community
 Project: https://github.com/Correcaminos737/CMO-Tactical-Voice
 
@@ -34,7 +34,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 from cmo_locator import detect_cmo_logs_dir, save_cmo_path
 from voice_downloader import ensure_voices_available
 
-__version__ = "1.2.1"
+__version__ = "1.2.13"
 
 # =============================================================================
 # 1. VOICE CONFIGURATION & CATALOG

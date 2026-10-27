@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 CMO Locator - Universal Path Detector for Command: Modern Operations
-Version: 1.2.0
+Version: 1.2.13
 Author: Correcaminos / CMO War Room Community
 
 Safely auto-detects the Command: Modern Operations installation and Logs folder

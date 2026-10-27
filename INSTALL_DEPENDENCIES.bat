@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 > nul
-title CMO Tactical Voice Advisor - Dependency Installer
+title CMO Tactical Voice Advisor v1.2.13 - Dependency Installer
 color 0A
 
 echo ======================================================================
-echo    CMO TACTICAL VOICE ADVISOR - DEPENDENCY INSTALLER
+echo    CMO TACTICAL VOICE ADVISOR v1.2.13 - DEPENDENCY INSTALLER
 echo ======================================================================
 echo.
 echo  Installing official Python libraries from PyPI:

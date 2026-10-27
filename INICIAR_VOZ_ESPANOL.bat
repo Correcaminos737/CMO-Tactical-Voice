@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 > nul
-title CMO Tactical Voice Advisor (Español)
+title CMO Tactical Voice Advisor v1.2.13 (Español)
 color 0B
 
 echo ======================================================================
-echo    CMO TACTICAL VOICE ADVISOR - (Edición de la Comunidad)
+echo    CMO TACTICAL VOICE ADVISOR - v1.2.13 (Edición de la Comunidad)
 echo    Autor: Correcaminos / CMO War Room Community
 echo ======================================================================
 echo.

@@ -5,7 +5,7 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
-## [1.2.11] - 2026-10-27
+## [1.2.13] - 2026-10-27
 
 ### 🚀 Facilidad de Instalación, Auto-Detección y Kills Confirmados / Installation & Detection Polish
 - **Detección Automática de Python y Protección de Versión (Python 3.12):**
