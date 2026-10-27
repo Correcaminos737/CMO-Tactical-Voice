@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 > nul
-title CMO Tactical Voice Advisor v1.2.13 (English)
+title CMO Tactical Voice Advisor v1.2.14 (English)
 color 0B
 
 echo ======================================================================
-echo    CMO TACTICAL VOICE ADVISOR - v1.2.13 (Community Edition)
+echo    CMO TACTICAL VOICE ADVISOR - v1.2.14 (Community Edition)
 echo    Author: Correcaminos / CMO War Room Community
 echo ======================================================================
 echo.
@@ -62,6 +62,31 @@ if "%PY_CMD%"=="" (
     echo.
     pause
     exit /b 1
+)
+
+:: Auto-preflight check: ensure piper-tts is installed in this Python environment
+%PY_CMD% -c "import piper" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ======================================================================
+    echo  [!] First run detected or Piper neural voice engine is missing.
+    echo      Installing dependencies automatically via pip...
+    echo      (This only happens once and takes ~30 seconds)
+    echo ======================================================================
+    echo.
+    %PY_CMD% -m pip install -r requirements.txt
+    if %ERRORLEVEL% NEQ 0 (
+        echo.
+        echo [ERROR] Failed to install dependencies automatically.
+        echo Please run INSTALL_DEPENDENCIES.bat or execute:
+        echo    pip install -r requirements.txt
+        echo ======================================================================
+        pause
+        exit /b 1
+    )
+    echo.
+    echo  [OK] Dependencies installed successfully! Starting voice advisor...
+    echo ======================================================================
+    echo.
 )
 
 %PY_CMD% cmo_tactical_voice.py --lang en

@@ -1,6 +1,6 @@
 # CMO Tactical Voice Advisor 🎙️
 ### Real-Time Neural Voice Advisory for Command: Modern Operations (CMO)
-**Version:** 1.2.13 (Community Edition)  
+**Version:** 1.2.14 (Community Edition)  
 **Author:** Correcaminos (Author of *Operation Absolute Resolve*, *The Hormuz Gauntlet* , and other CMO scenarios)
 **Platform:** Windows 10 / 11 (64-bit)  
 **License:** Community Non-Commercial & Attribution 
@@ -39,9 +39,9 @@
    - Extract the zip folder anywhere (or directly inside your `Command - Modern Operations` main folder).
    - Double-click **`INSTALL_DEPENDENCIES.bat`** (only needed once, installs the AI voice engine).
 
-2. **Enable Message Log in CMO:**
+2. **Enable Events in CMO Message Log:**
    - In CMO: Go to **Game** ➔ **Game Options** ➔ **Message Log** tab.
-   - Check `[X] Write message log to file`. ([Detailed Guide](docs/CMO_MESSAGE_LOG_SETUP.md)).
+   - Under the **"Show on Message Log"** column, check `[X]` the event categories you want to hear (or check all for full immersion). ([Detailed Guide](docs/CMO_MESSAGE_LOG_SETUP.md)).
 
 3. **Run the Advisor:**
    - Double-click **`START_VOICE_ENGLISH.bat`** (or `INICIAR_VOZ_ESPANOL.bat` for Spanish).
@@ -121,9 +121,9 @@ To deliver an authentic military radio atmosphere without turning your speakers 
    - Descomprime el archivo zip donde prefieras (o directamente dentro de la carpeta de `Command - Modern Operations`).
    - Haz doble clic en **`INSTALAR_DEPENDENCIAS.bat`** (o `INSTALL_DEPENDENCIES.bat`, solo la primera vez).
 
-2. **Activar el Message Log en CMO:**
+2. **Activar Eventos en el Message Log de CMO:**
    - En CMO: Ve a **Game** ➔ **Game Options** ➔ pestaña **Message Log**.
-   - Marca la casilla `[X] Write message log to file`. ([Guía detallada](docs/CMO_MESSAGE_LOG_SETUP.md)).
+   - En la columna **"Show on Message Log"**, marca con `[X]` las categorías que quieras escuchar (o márcalas todas para inmersión total). ([Guía detallada](docs/CMO_MESSAGE_LOG_SETUP.md)).
 
 3. **Iniciar el Asesor de Voz:**
    - Haz doble clic en **`INICIAR_VOZ_ESPANOL.bat`** (o `START_VOICE_ENGLISH.bat` para inglés).

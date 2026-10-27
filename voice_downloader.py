@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Piper Voice Model Downloader for CMO Tactical Voice Advisor
-Version: 1.2.13
+Version: 1.2.14
 Author: Correcaminos / CMO War Room Community
 
 Safely downloads official Piper neural voice models directly from Hugging Face
