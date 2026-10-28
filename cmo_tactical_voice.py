@@ -950,7 +950,7 @@ class WeaponPhoneticHelper:
 
     @classmethod
 
-    def get_info(cls, weapon_raw: str) -> Tuple[str, str]:
+    def get_info(cls, weapon_raw: str, lang: str = "es") -> Tuple[str, str]:
 
         w_up = weapon_raw.upper()
 
@@ -988,7 +988,7 @@ class WeaponPhoneticHelper:
 
 
 
-        clean = PhoneticHelper.clean_weapon(weapon_raw, "es")
+        clean = PhoneticHelper.clean_weapon(weapon_raw, lang)
 
         return category, clean
 
@@ -1258,7 +1258,7 @@ class CmoTacticalVoiceAdvisor:
 
             "domain": domain.upper(),
 
-            "name": PhoneticHelper.clean_name(name),
+            "name": PhoneticHelper.clean_name(name, self.lang),
 
             "bearing": bearing,
 
@@ -1658,7 +1658,7 @@ class CmoTacticalVoiceAdvisor:
 
         if not c_unit:
 
-            c_unit = PhoneticHelper.clean_name(unit_name)
+            c_unit = PhoneticHelper.clean_name(unit_name, self.lang)
 
 
 
@@ -2752,7 +2752,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             raw_unit = m_dest.group(1).strip()
 
-                            clean_target = PhoneticHelper.clean_name(raw_unit)
+                            clean_target = PhoneticHelper.clean_name(raw_unit, lang)
 
 
 
@@ -3036,9 +3036,9 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             t_raw = m_hit.group(2).strip()
 
-                            w_clean = PhoneticHelper.clean_weapon(w_raw)
+                            w_clean = PhoneticHelper.clean_weapon(w_raw, lang)
 
-                            t_clean = PhoneticHelper.clean_name(t_raw)
+                            t_clean = PhoneticHelper.clean_name(t_raw, lang)
 
 
 
@@ -3094,7 +3094,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             c_host = m_class.group(3).strip() if m_class.group(3) else "Hostile"
 
-                            c_type = PhoneticHelper.clean_name(raw_type)
+                            c_type = PhoneticHelper.clean_name(raw_type, lang)
 
 
 
@@ -3240,7 +3240,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                         if m_bingo:
 
-                            u_name = PhoneticHelper.clean_name(m_bingo.group(1).strip())
+                            u_name = PhoneticHelper.clean_name(m_bingo.group(1).strip(), lang)
 
                             if lang == "es":
 
@@ -3358,9 +3358,9 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             raw_obs = m_bda.group(1).strip()
 
-                            observer = PhoneticHelper.clean_name(raw_obs)
+                            observer = PhoneticHelper.clean_name(raw_obs, lang)
 
-                            c_id = PhoneticHelper.clean_name(m_bda.group(2).strip())
+                            c_id = PhoneticHelper.clean_name(m_bda.group(2).strip(), lang)
 
                             bda_desc = m_bda.group(3).strip()
 
