@@ -34,18 +34,24 @@ if "%PY_CMD%"=="" (
     if %ERRORLEVEL% EQU 0 set "PY_CMD=py -3"
 )
 
-:: 3. Comprobar ruta por defecto de instalación de usuario (AppData\Local\Programs\Python)
+:: 3. Comprobar ruta por defecto de instalacion de usuario (AppData\Local\Programs\Python)
 if "%PY_CMD%"=="" (
-    for /d %%i in ("%LOCALAPPDATA%\Programs\Python\Python*") do (
-        if exist "%%i\python.exe" set "PY_CMD="%%i\python.exe""
-    )
+    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" set "PY_CMD="%LOCALAPPDATA%\Programs\Python\Python312\python.exe""
+    if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" set "PY_CMD="%LOCALAPPDATA%\Programs\Python\Python311\python.exe""
+    if exist "%LOCALAPPDATA%\Programs\Python\Python310\python.exe" set "PY_CMD="%LOCALAPPDATA%\Programs\Python\Python310\python.exe""
 )
 
 :: 4. Comprobar Program Files
 if "%PY_CMD%"=="" (
-    for /d %%i in ("%ProgramFiles%\Python*") do (
-        if exist "%%i\python.exe" set "PY_CMD="%%i\python.exe""
-    )
+    if exist "%ProgramFiles%\Python312\python.exe" set "PY_CMD="%ProgramFiles%\Python312\python.exe""
+    if exist "%ProgramFiles%\Python311\python.exe" set "PY_CMD="%ProgramFiles%\Python311\python.exe""
+    if exist "%ProgramFiles%\Python310\python.exe" set "PY_CMD="%ProgramFiles%\Python310\python.exe""
+)
+if "%PY_CMD%"=="" (
+    if exist "%ProgramFiles(x86)%\Python312\python.exe" set "PY_CMD="%ProgramFiles(x86)%\Python312\python.exe""
+    if exist "%ProgramFiles(x86)%\Python311\python.exe" set "PY_CMD="%ProgramFiles(x86)%\Python311\python.exe""
+    if exist "%ProgramFiles(x86)%\Python310\python.exe" set "PY_CMD="%ProgramFiles(x86)%\Python310\python.exe""
+)
 )
 if "%PY_CMD%"=="" (
     for /d %%i in ("%ProgramFiles(x86)%\Python*") do (
