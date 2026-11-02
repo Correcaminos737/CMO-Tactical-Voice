@@ -16,3 +16,6 @@ cmo_path.txt
 Thumbs.db
 .vscode/
 .idea/
+
+# Release ZIPs
+*.zip
