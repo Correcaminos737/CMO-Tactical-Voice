@@ -1196,59 +1196,51 @@ class CmoTacticalVoiceAdvisor:
 
 
 
+            models = {re.sub(r'\s*\d+$', '', it["clean"]).strip() for it in items}
+            is_mixed = len(models) > 1
+            common_model = list(models)[0] if not is_mixed else ("aeronaves" if self.lang == "es" else "aircraft")
+            count = len(items)
+
             if self.lang == "es":
-
                 caller = "Control de vuelo"
-
                 if len(items) == 1:
-
                     u = items[0]["clean"]
-
                     disp = f"VUELO: {u} en el aire desde {base_name}."
-
                     speech = f"{caller}: {u} en el aire desde {base_name}."
-
                 elif len(items) == 2:
-                    u1 = items[0]["clean"]
-                    disp = f"🛫 [DESPEGUE EN SECCIÓN]: 2x {u1} en el aire desde {base_name}."
-                    speech = f"{caller}: Sección de dos {u1} en el aire desde {base_name}." 
-
+                    if is_mixed:
+                        disp = f"🛫 [DESPEGUE EN SECCIÓN]: 2x aeronaves (mixto) en el aire desde {base_name}."
+                        speech = f"{caller}: Sección de dos aeronaves en el aire desde {base_name}."
+                    else:
+                        disp = f"🛫 [DESPEGUE EN SECCIÓN]: 2x {common_model} en el aire desde {base_name}."
+                        speech = f"{caller}: Sección de dos {common_model} en el aire desde {base_name}."
                 else:
-
-                    count = len(items)
-
-                    u_type = items[0]["clean"].split()[0]
-
-                    disp = f"LANZAMIENTO EN PAQUETE: {count}x {u_type} en el aire desde {base_name}."
-
-                    speech = f"{caller}: Paquete de {count} {u_type} en el aire desde {base_name}."
-
+                    if is_mixed:
+                        disp = f"LANZAMIENTO EN PAQUETE: {count}x aeronaves (mixto) en el aire desde {base_name}."
+                        speech = f"{caller}: Paquete de {count} aeronaves en el aire desde {base_name}."
+                    else:
+                        disp = f"LANZAMIENTO EN PAQUETE: {count}x {common_model} en el aire desde {base_name}."
+                        speech = f"{caller}: Paquete de {count} {common_model} en el aire desde {base_name}."
             else:
-
                 caller = "Flight operations"
-
                 if len(items) == 1:
-
                     u = items[0]["clean"]
-
                     disp = f"FLIGHT OPS: {u} airborne from {base_name}."
-
                     speech = f"{caller}: {u} airborne from {base_name}."
-
                 elif len(items) == 2:
-                    u1 = items[0]["clean"]
-                    disp = f"🛫 [SECTION DEPARTURE]: 2-ship flight ({u1}) airborne from {base_name}."
-                    speech = f"{caller}: 2-ship flight of {u1} airborne from {base_name}." 
-
+                    if is_mixed:
+                        disp = f"🛫 [SECTION DEPARTURE]: 2x aircraft (mixed) airborne from {base_name}."
+                        speech = f"{caller}: 2-ship flight of mixed aircraft airborne from {base_name}."
+                    else:
+                        disp = f"🛫 [SECTION DEPARTURE]: 2-ship flight ({common_model}) airborne from {base_name}."
+                        speech = f"{caller}: 2-ship flight of {common_model} airborne from {base_name}."
                 else:
-
-                    count = len(items)
-
-                    u_type = items[0]["clean"].split()[0]
-
-                    disp = f"STRIKE PACKAGE: {count}x {u_type} airborne from {base_name}."
-
-                    speech = f"{caller}: Strike package of {count} {u_type} airborne from {base_name}."
+                    if is_mixed:
+                        disp = f"STRIKE PACKAGE: {count}x aircraft (mixed) airborne from {base_name}."
+                        speech = f"{caller}: Strike package of {count} aircraft airborne from {base_name}."
+                    else:
+                        disp = f"STRIKE PACKAGE: {count}x {common_model} airborne from {base_name}."
+                        speech = f"{caller}: Strike package of {count} {common_model} airborne from {base_name}." 
 
 
 
@@ -3181,150 +3173,110 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             raw_type = m_class.group(2).strip()
 
-                            c_host = m_class.group(3).strip() if m_class.group(3) else "Hostile"
-
+                            c_host = m_class.group(3).strip() if m_class.group(3) else "Unknown"
                             c_type = PhoneticHelper.clean_name(raw_type, lang)
 
-
-
                             if not c_type or len(c_type) <= 1:
-
                                 continue
-
-
 
                             c_type_up = c_type.upper()
 
-
-
                             # Skip civilian traffic
-
                             if any(k in c_type_up for k in CIVILIAN_KEYWORDS):
-
                                 continue
-
-
 
                             c_id_clean = PhoneticHelper.clean_name(c_id, lang)
 
                             # Evitar auto-identificaciones absurdas (ej. un buque identificado como si mismo)
                             if c_id.upper() == raw_type.upper() or c_id_clean.upper() == c_type.upper():
-
                                 continue
-
-
 
                             c_key = f"{c_id}:{c_type}"
-
                             if c_key in advisor.known_contacts:
-
                                 continue
-
                             advisor.known_contacts.add(c_key)
 
-
-
                             # If in initial baseline sync (scenario start), absorb silently
-
                             if advisor.is_baseline_sync:
-
                                 advisor.baseline_contacts_count += 1
-
                                 continue
 
-
-
                             c_id_up = c_id.upper()
-
                             AIR_DESIGNATORS = (
-
                                 "BOGEY", "FIGHTER", "BOMBER", "AEW", "AWACS", "OECM", "MULTIROLE", "HELO", "HELICOPTER",
-
                                 "ATTACK", "RECON", "TANKER", "AIR", "UAV", "DRONE", "MISSILE", "VAMPIRE"
-
                             )
-
                             AIR_MODELS = (
-
                                 "FIGHTER", "BOMBER", "ATTACK", "AIRCRAFT", "MULTIROLE", "HELICOPTER", "HELO",
-
                                 "YAK", "MIG", "SU-", "F-", "FORGER", "FOXHOUND", "FOXBAT", "FLOGGER", "FLANKER", "FULCRUM",
-
                                 "FARMER", "FISHBED", "FITTER", "FRESCO", "FAGOT", "FIREBIRD", "FROGFOOT", "FENCER",
-
                                 "BADGER", "BEAR", "BACKFIRE", "BLACKJACK", "BLINDER", "BULL", "BOUNDER", "BREWER",
-
                                 "H-6", "TU-", "IL-", "AN-", "J-", "JH-", "Y-", "KJ-", "Q-",
-
                                 "HORNET", "TOMCAT", "EAGLE", "VIPER", "FALCON", "RAPTOR", "LIGHTNING", "PHANTOM",
-
                                 "CORSAIR", "INTRUDER", "PROWLER", "GROWLER", "WARTHOG", "HARRIER", "HAWKEYE", "SENTRY",
-
                                 "ORION", "POSEIDON", "HERCULES", "GALAXY", "STRATOLIFTER", "STRATOFORTRESS", "LANCER",
-
                                 "SPIRIT", "MIRAGE", "RAFALE", "TYPHOON", "GRIPEN", "DRAKEN", "VIGGEN", "TORNADO",
-
                                 "SEASPRITE", "SEA HAWK", "SEA KING", "MERLIN", "WILDCAT", "LYNX", "HIND", "HAVOC",
-
                                 "HOKUM", "HIP", "HELIX", "HORMONE", "AIRLINER", "BOEING", "AIRBUS", "ATR-", "CESSNA", "CITATION"
-
                             )
 
                             if any(c_id_up.startswith(d) for d in AIR_DESIGNATORS) or any(a in c_type_up for a in AIR_MODELS):
-
                                 domain = "AIR"
-
                             elif c_id_up.startswith("GOBLIN") or any(s in c_type_up for s in ("SUB", "SSN", "SSK", "SUBMARINE", "TORPEDO")):
-
                                 domain = "SUB"
-
                             else:
-
                                 domain = "SURFACE"
 
+                            is_false_target = "FALSETARGET" in raw_type.upper() or "FALSETARGET" in c_type_up or "BIOLOGIC" in raw_type.upper()
 
-
-                            if lang == "es":
-
-                                host_map_es = {
-                                    "FRIENDLY": "Amigo",
-                                    "HOSTILE": "Hostil",
-                                    "NEUTRAL": "Neutral",
-                                    "UNFRIENDLY": "No amigo",
-                                    "UNKNOWN": "Desconocido"
-                                }
-                                c_host_str = host_map_es.get(c_host.upper(), c_host)
-
-                                if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
-                                    sp = f"¡Alerta! Contacto {c_id_clean} identificado como hostil {c_type}."
-                                elif c_host.upper() == "FRIENDLY":
-                                    sp = f"Contacto {c_id_clean} identificado positivamente como aliado {c_type}."
-                                elif c_host.upper() == "NEUTRAL":
-                                    sp = f"Contacto {c_id_clean} identificado como tráfico neutral {c_type}."
+                            if is_false_target:
+                                if lang == "es":
+                                    c_type = "blanco falso"
+                                    sp = f"Contacto {c_id_clean} clasificado como blanco falso."
+                                    dp = f"CONTACTO CLASIFICADO: {c_id_clean} -> Blanco falso (No hostil)."
                                 else:
-                                    sp = f"Contacto {c_id_clean} identificado positivamente como {c_type}."
-
-                                dp = f"CONTACTO IDENTIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
-
+                                    c_type = "false target"
+                                    sp = f"Contact {c_id_clean} classified as false target."
+                                    dp = f"CONTACT CLASSIFIED: {c_id_clean} -> False Target (Non-hostile)."
                             else:
+                                if lang == "es":
+                                    host_map_es = {
+                                        "FRIENDLY": "Amigo",
+                                        "HOSTILE": "Hostil",
+                                        "NEUTRAL": "Neutral",
+                                        "UNFRIENDLY": "No amigo",
+                                        "UNKNOWN": "Desconocido"
+                                    }
+                                    c_host_str = host_map_es.get(c_host.upper(), "Desconocido")
 
-                                if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
-                                    sp = f"Warning: Contact {c_id_clean} identified as hostile {c_type}."
-                                elif c_host.upper() == "FRIENDLY":
-                                    sp = f"Contact {c_id_clean} positively identified as friendly {c_type}."
-                                elif c_host.upper() == "NEUTRAL":
-                                    sp = f"Contact {c_id_clean} identified as neutral {c_type}."
+                                    if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
+                                        sp = f"¡Alerta! Contacto {c_id_clean} identificado como hostil {c_type}."
+                                        dp = f"CONTACTO IDENTIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
+                                    elif c_host.upper() == "FRIENDLY":
+                                        sp = f"Contacto {c_id_clean} identificado como aliado {c_type}."
+                                        dp = f"CONTACTO IDENTIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
+                                    elif c_host.upper() == "NEUTRAL":
+                                        sp = f"Contacto {c_id_clean} identificado como tráfico neutral {c_type}."
+                                        dp = f"CONTACTO IDENTIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
+                                    else:
+                                        sp = f"Contacto {c_id_clean} clasificado como {c_type}."
+                                        dp = f"CONTACTO CLASIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
                                 else:
-                                    sp = f"Contact {c_id_clean} identified as {c_type}."
+                                    if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
+                                        sp = f"Warning: Contact {c_id_clean} identified as hostile {c_type}."
+                                        dp = f"CONTACT IDENTIFIED: {c_id_clean} -> {c_type} ({c_host})."
+                                    elif c_host.upper() == "FRIENDLY":
+                                        sp = f"Contact {c_id_clean} identified as friendly {c_type}."
+                                        dp = f"CONTACT IDENTIFIED: {c_id_clean} -> {c_type} ({c_host})."
+                                    elif c_host.upper() == "NEUTRAL":
+                                        sp = f"Contact {c_id_clean} identified as neutral {c_type}."
+                                        dp = f"CONTACT IDENTIFIED: {c_id_clean} -> {c_type} ({c_host})."
+                                    else:
+                                        sp = f"Contact {c_id_clean} classified as {c_type}."
+                                        dp = f"CONTACT CLASSIFIED: {c_id_clean} -> {c_type} ({c_host})."
 
-                                dp = f"CONTACT IDENTIFIED: {c_id_clean} -> {c_type} ({c_host})."
-
-
-
-                            if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
-
+                            if c_host.upper() in ("HOSTILE", "UNFRIENDLY") and not is_false_target:
                                 advisor.known_hostiles.add(c_id.upper())
-
                                 advisor.known_hostiles.add(c_type.upper())
 
                                 for part in c_type.upper().split():

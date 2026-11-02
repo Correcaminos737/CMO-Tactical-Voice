@@ -14,6 +14,13 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 - **Tratamiento de Incertidumbre de Contactos (Radar Activo vs. ESM Pasivo):**
   - **Contacto Fijo (Radar Activo / Sónar Activo)**: Anuncio con distancia exacta confirmada (`al 079, a 54 millas` / `bearing 079, at 54 miles`).
   - **Contacto Incierto (ESM Pasivo / RWR / ELINT / Línea de Posición LOP)**: Se canta explícitamente el techo de horizonte radar (`al 085, máximo estimado 166 millas` / `bearing 085, estimated up to 166 miles`), evitando falsas asunciones de proximidad táctica.
+- **Corrección de Clasificación de Blancos Falsos (FalseTarget / Neutral / Desconocido):**
+  - Eliminado el falso positivo donde contactos acústicos ambiguos, capas térmicas o biológicos (`FalseTarget`) se cantaban erróneamente como hostiles (`¡Alerta! Contacto ... identificado como hostil`).
+  - Ahora se clasifican limpiamente sin falsa alarma: `Blanco falso (No hostil)` / `False Target (Non-hostile)`.
+  - Los contactos sin postura confirmada por CMO ya no asumen por omisión que son hostiles, reportándose como desconocidos.
+- **Agrupación Inteligente de Despegues Aéreos (Lanzamientos Mixtos vs. Mismo Modelo):**
+  - Si despegan varios aviones del mismo modelo (ej. 3 Hornets), se especifica el modelo: *«Paquete de 3 Hornet en el aire»*.
+  - Si despegan modelos combinados (ej. 1 P-3B Orion y 2 Hornets), se agrupan genéricamente como paquete mixto: *«Paquete de 3 aeronaves en el aire»* (`3x aeronaves (mixto)`), evitando atribuir falsamente todo el paquete al primer avión que rueda.
 - **Motor Anti-Saturación de Contactos Navales y Submarinos:**
   - Consolidación automática de detecciones múltiples: si se detectan 3 o más buques simultáneos (SKUNK), se emite un único reporte consolidado de grupo (*"Puente de mando. Detección múltiple: fuerza de 4 contactos de superficie al 085"* / *"Bridge. Multiple detections: group of 4 surface contacts bearing 085"*).
   - Consolidación de contactos submarinos si se detectan 2 o más GOBLIN simultáneos.
