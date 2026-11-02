@@ -6,7 +6,7 @@ chcp 65001 > nul
 
 
 
-title CMO Tactical Voice Advisor v1.2.14 - Dependency Installer
+title CMO Tactical Voice Advisor v1.2.16 - Dependency Installer
 
 
 
@@ -22,7 +22,7 @@ echo ======================================================================
 
 
 
-echo    CMO TACTICAL VOICE ADVISOR v1.2.14 - DEPENDENCY INSTALLER
+echo    CMO TACTICAL VOICE ADVISOR v1.2.16 - DEPENDENCY INSTALLER
 
 
 

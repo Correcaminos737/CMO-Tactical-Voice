@@ -6,7 +6,7 @@
 
 CMO Tactical Voice Advisor - Community Edition
 
-Version: 1.2.14
+Version: 1.2.16
 
 Author: Correcaminos & CMO War Room Community
 
@@ -70,7 +70,7 @@ from voice_downloader import ensure_voices_available
 
 
 
-__version__ = "1.2.14"
+__version__ = "1.2.16"
 
 
 
@@ -346,6 +346,20 @@ class VoiceAlert:
 
 class PhoneticHelper:
 
+    @classmethod
+    def sanitize_cmo_target_prefix(cls, name: str) -> str:
+        """Limpia etiquetas de objetivo compuestas de CMO como '[USAF TARGET] Estacion' o '[TARGET[ Puente'."""
+        if not name:
+            return ""
+        n = name.strip()
+        import re
+        if ']' in n and n.find(']') < len(n)//2 and not n.startswith(('Unit:', 'Contact:')):
+            n = re.sub(r'^\s*\[?[^\]\n]*\]\s*', '', n)
+        n = re.sub(r'^\s*\[TARGET\[\s*', '', n, flags=re.IGNORECASE)
+        n = re.sub(r'^[\s\]\[/]+', '', n)
+        return n.strip()
+
+
     """Cleans technical CMO strings into natural military radio brevity and phonetics."""
 
 
@@ -450,9 +464,13 @@ class PhoneticHelper:
 
             return found
 
-        # 1. Strip bracketed system IDs first: [S-75M Volkhov], [5N69], [Meko 200TN]
+        # 1. Strip bracketed system IDs first: [S-75M Volkhov], [5N69], [Meko 200TN], [Sensor: ...]
 
         text = re.sub(r'\[.*?\]', '', raw)
+
+        # Strip sensor / identification / determination annotations from CMO logs
+        text = re.sub(r'\((?:ID|Classification)\s+by:.*?\)', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s*-\s*Determined as:\s*[A-Za-z]+', '', text, flags=re.IGNORECASE)
 
         # 2. If it has parentheses with a designation like (SA-2f Guideline), blend nicely
 
@@ -509,6 +527,9 @@ class PhoneticHelper:
         b = re.sub(r'\(.*?\)', '', b)
 
         b = re.sub(r'\[.*?\]', '', b)
+
+        # Reemplazar barra "/" por espacio para evitar que la voz diga "barra" (ej. "Berat/Kucove" -> "Berat Kucove")
+        b = re.sub(r'\s*/\s*', ' ', b)
 
         return re.sub(r'\s+', ' ', b).strip()
 
@@ -671,6 +692,7 @@ class PhoneticHelper:
             return found
 
         d = raw.strip()
+        d = re.sub(r'\s*\[Sensors:.*?\]', '', d, flags=re.IGNORECASE).strip()
 
         # 1. Site / Ground Radar patterns: "Skiros AN/TPS-43F Site", "Mount Hymettus S-743D Site", "Samos MPDR-90 Site"
 
@@ -757,29 +779,25 @@ class PhoneticHelper:
 
 
     @classmethod
-
-    def format_distance(cls, dist_raw: Any, lang: str = "es") -> str:
-
+    def format_distance(cls, dist_raw: Any, lang: str = "es", is_estimated: bool = False) -> str:
         if not dist_raw:
-
             return ""
-
         s = str(dist_raw).lower().replace("nm", "").replace(",", ".").strip()
-
         try:
-
             val = float(s)
-
-            if val < 1.0:
-
-                return "a menos de una milla" if lang == "es" else "under one mile"
-
             m = round(val)
-
-            return f"a {m} millas" if lang == "es" else f"at {m} miles"
-
+            if is_estimated:
+                if lang == "es":
+                    return f"máximo estimado {m} millas"
+                else:
+                    return f"estimated up to {m} miles"
+            else:
+                if val < 1.0:
+                    return "a menos de una milla" if lang == "es" else "under one mile"
+                return f"a {m} millas" if lang == "es" else f"at {m} miles"
         except Exception:
-
+            if is_estimated:
+                return f"máximo estimado {dist_raw}" if lang == "es" else f"estimated up to {dist_raw}"
             return f"a {dist_raw}" if lang == "es" else f"at {dist_raw}"
 
 
@@ -918,6 +936,15 @@ class PhoneticHelper:
 
             t = re.sub(r'\bCG\b', 'crucero', t)
 
+            t = re.sub(r'\bCL\b', 'crucero ligero', t)
+
+            t = re.sub(r'\bAO\b', 'petrolero', t)
+
+            # Normalización de unidades de medida (evitar "ene eme" por "millas")
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*nm\b', r'\1 millas', t, flags=re.IGNORECASE)
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*kn\b', r'\1 nudos', t, flags=re.IGNORECASE)
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*ft\b', r'\1 pies', t, flags=re.IGNORECASE)
+
             t = re.sub(r'\s+', ' ', t).strip()
 
             return t
@@ -931,6 +958,11 @@ class PhoneticHelper:
             t = re.sub(r'\bAIM-(\d+)\b', r'Aim \1', t, flags=re.IGNORECASE)
 
             t = re.sub(r'#(\d+)', r'number \1', t)
+
+            # Distance and speed unit normalization
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*nm\b', r'\1 miles', t, flags=re.IGNORECASE)
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*kn\b', r'\1 knots', t, flags=re.IGNORECASE)
+            t = re.sub(r'(\d+(?:[.,]\d+)?)\s*ft\b', r'\1 feet', t, flags=re.IGNORECASE)
 
             return t
 
@@ -954,7 +986,7 @@ class WeaponPhoneticHelper:
 
         w_up = weapon_raw.upper()
 
-        if any(t in w_up for t in ("TORPEDO", "MK46", "MK 46", "MK-46", "MK48", "MK 48", "MK-48", "MK37", "MK54", "53-65", "53-56", "SET-65", "SET-53", "TEST-71", "STING RAY", "SPEARFISH", "TIGERFISH", "MU90")):
+        if any(t in w_up for t in ("TORPEDO", "MK46", "MK 46", "MK-46", "MK48", "MK 48", "MK-48", "MK37", "MK54", "53-65", "53-56", "SET-65", "SET-53", "TEST-71", "STING RAY", "SPEARFISH", "TIGERFISH", "MU90", " TT")):
 
             category = "TORPEDO"
 
@@ -968,15 +1000,17 @@ class WeaponPhoneticHelper:
 
         elif any(g in w_up for g in (
 
-            "76MM", "127MM", "5\"/54", "5\"/38", "3\"/50", "20MM", "23MM", "30MM",
+            "76MM", "100MM", "105MM", "114MM", "120MM", "122MM", "127MM", "130MM", "152MM", "155MM", "203MM", "406MM",
 
-            "12.7MM", "14.5MM", "37MM", "57MM", "85MM", "100MM", "130MM",
+            "5\"/54", "5\"/38", "3\"/50", "4.5\"", "16\"", "16-INCH", "20MM", "23MM", "25MM", "30MM", "35MM", "40MM",
 
-            "GUN", "CANNON", "BURST", "AAA", "FLAK", "SHELL", "ARTILLERY",
+            "12.7MM", "14.5MM", "37MM", "57MM", "85MM",
+
+            "GUN", "CANNON", "BURST", "SALVO", "AAA", "FLAK", "SHELL", "ARTILLERY", "HOWITZER",
 
             "ZSU-", "DSHK", "ZPU-", "BOFORS", "PHALANX", "CIWS", "GOALKEEPER",
 
-            "AK-230", "AK-630", "GSH-", "NR-23", "NR-30", "VULCAN", "M61", "GAU-"
+            "AK-230", "AK-630", "AK-100", "AK-176", "AK-726", "GSH-", "NR-23", "NR-30", "VULCAN", "M61", "GAU-"
 
         )):
 
@@ -1019,6 +1053,7 @@ class CmoTacticalVoiceAdvisor:
         self.known_hostiles: set = set()
 
         self.friendly_units: set = set()
+
 
         self.is_baseline_sync = False
 
@@ -1078,6 +1113,31 @@ class CmoTacticalVoiceAdvisor:
 
 
 
+    def register_friendly_unit(self, name: str):
+        if not name:
+            return
+        u_raw = str(name).strip()
+        self.friendly_units.add(u_raw.upper())
+        c_u = PhoneticHelper.clean_unit_callsign(u_raw)
+        if c_u:
+            self.friendly_units.add(c_u.upper())
+            for part in c_u.upper().split():
+                if len(part) > 2 and part not in ("THE", "AND", "HAS", "UNIT", "AIRCRAFT"):
+                    self.friendly_units.add(part)
+
+    def is_friendly(self, unit_name: str) -> bool:
+        if not unit_name:
+            return False
+        u_up = str(unit_name).upper().strip()
+        if u_up in self.friendly_units:
+            return True
+        for f in self.friendly_units:
+            if f and (f in u_up or u_up in f):
+                return True
+        if self.player_side and self.player_side.upper() in u_up:
+            return True
+        return False
+
     def notify_departure(self, unit_raw: str, base_raw: str):
 
         """Batches multi-ship takeoffs within 1.8s into a single military radio announcement."""
@@ -1104,7 +1164,7 @@ class CmoTacticalVoiceAdvisor:
 
                 self.departure_timer.cancel()
 
-            self.departure_timer = threading.Timer(1.8, self._flush_departure_buffer)
+            self.departure_timer = threading.Timer(3.5, self._flush_departure_buffer)
 
             self.departure_timer.daemon = True
 
@@ -1149,12 +1209,9 @@ class CmoTacticalVoiceAdvisor:
                     speech = f"{caller}: {u} en el aire desde {base_name}."
 
                 elif len(items) == 2:
-
                     u1 = items[0]["clean"]
-
-                    disp = f"VUELO EN SECCIÓN: 2x aeronaves ({u1}) en el aire desde {base_name}."
-
-                    speech = f"{caller}: Sección de dos aeronaves en el aire desde {base_name}."
+                    disp = f"🛫 [DESPEGUE EN SECCIÓN]: 2x {u1} en el aire desde {base_name}."
+                    speech = f"{caller}: Sección de dos {u1} en el aire desde {base_name}." 
 
                 else:
 
@@ -1179,12 +1236,9 @@ class CmoTacticalVoiceAdvisor:
                     speech = f"{caller}: {u} airborne from {base_name}."
 
                 elif len(items) == 2:
-
                     u1 = items[0]["clean"]
-
-                    disp = f"SECTION DEPARTURE: 2-ship flight ({u1}) airborne from {base_name}."
-
-                    speech = f"{caller}: 2-ship flight airborne from {base_name}."
+                    disp = f"🛫 [SECTION DEPARTURE]: 2-ship flight ({u1}) airborne from {base_name}."
+                    speech = f"{caller}: 2-ship flight of {u1} airborne from {base_name}." 
 
                 else:
 
@@ -1219,10 +1273,8 @@ class CmoTacticalVoiceAdvisor:
 
 
     def notify_contact(self, contact_id: str, domain: str, name: str,
-
                        bearing: Optional[float] = None, distance: Optional[str] = None,
-
-                       detector: Optional[str] = None):
+                       detector: Optional[str] = None, is_estimated: bool = False):
 
         """Batches and consolidates new contact detections with bearings and distances."""
 
@@ -1253,21 +1305,14 @@ class CmoTacticalVoiceAdvisor:
 
 
         item = {
-
             "id": contact_id,
-
             "domain": domain.upper(),
-
             "name": PhoneticHelper.clean_name(name, self.lang),
-
             "bearing": bearing,
-
             "distance": distance,
-
+            "is_estimated": is_estimated,
             "detector": detector,
-
             "time": time.time()
-
         }
 
 
@@ -1361,49 +1406,94 @@ class CmoTacticalVoiceAdvisor:
             ))
 
             # Process remaining non-air items
-
             items = [x for x in items if x not in air_items]
 
+        # Anti-saturación Naval: Si >= 3 trazas de superficie (ej. flotilla o ráfaga de cortes ESM)
+        surf_items = [x for x in items if "SURFACE" in x["domain"] or x["id"].upper().startswith("SKUNK")]
+        if len(surf_items) >= 3:
+            bearings = [x["bearing"] for x in surf_items if x["bearing"] is not None]
+            avg_b_str = ""
+            if bearings:
+                avg_val = int(sum(bearings) / len(bearings))
+                b_str = PhoneticHelper.format_bearing(avg_val, self.lang)
+                avg_b_str = f" {b_str}" if self.lang == "es" else f" bearing {avg_val:03d}"
 
+            count = len(surf_items)
+            if self.lang == "es":
+                dp = f"⚠️ [SATURACIÓN NAVAL]: Detectados {count} nuevos contactos de superficie{avg_b_str}."
+                sp = f"Puente de mando. Detección múltiple: fuerza de {count} contactos de superficie{avg_b_str}."
+            else:
+                dp = f"⚠️ [SURFACE SATURATION]: {count} new surface tracks detected{avg_b_str}."
+                sp = f"Bridge. Multiple detections: group of {count} surface contacts{avg_b_str}."
 
-        # Individual reporting
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="SURFACE",
+                text_display=dp,
+                text_speech=sp,
+                ttl_seconds=14.0
+            ))
+            items = [x for x in items if x not in surf_items]
 
+        # Anti-saturación Submarina / ASW: Si >= 2 trazas submarinas
+        sub_items = [x for x in items if "SUB" in x["domain"] or x["id"].upper().startswith("GOBLIN")]
+        if len(sub_items) >= 2:
+            count = len(sub_items)
+            if self.lang == "es":
+                dp = f"⚠️ [ALERTA ASW]: Detectados {count} contactos submarinos múltiples."
+                sp = f"Oficial antisubmarino. Alerta sónar: múltiples contactos Goblin en el sector."
+            else:
+                dp = f"⚠️ [ASW WARNING]: {count} multiple submarine contacts detected."
+                sp = f"ASW officer. Sonar alert: multiple Goblin contacts in sector."
+
+            self.alert_queue.put(VoiceAlert(
+                priority=PRIORITY_NORMAL,
+                timestamp=now,
+                domain="SUB",
+                text_display=dp,
+                text_speech=sp,
+                ttl_seconds=14.0
+            ))
+            items = [x for x in items if x not in sub_items]
+
+        # Individual reporting (1 o 2 contactos)
         for it in items:
-
             b_str = PhoneticHelper.format_bearing(it.get("bearing"), self.lang)
-
-            d_str = PhoneticHelper.format_distance(it.get("distance"), self.lang)
+            d_str = PhoneticHelper.format_distance(it.get("distance"), self.lang, it.get("is_estimated", False))
 
             det = PhoneticHelper.clean_detector(it.get("detector", ""), self.lang)
-
-            det_prefix = f"{det}: " if det else ""
-
             c_name = it["name"]
 
-
-
             details = [x for x in [b_str, d_str] if x]
-
             details_str = ", ".join(details) if details else ""
 
-
-
             if self.lang == "es":
-
-                disp = f"🎯 CONTACTO: {det_prefix}{c_name} | {details_str}"
-
-                speech = f"{det_prefix}{c_name} contacto, {details_str}." if det else f"{c_name} contacto, {details_str}."
-
+                det_suffix = ""
+                det_speech = ""
+                if det:
+                    if det.isdigit():
+                        det_suffix = f" (Detectado por unidad {det})"
+                        det_speech = f"Informe de unidad {det}: contacto {c_name}, {details_str}."
+                    else:
+                        det_suffix = f" (Detectado por {det})"
+                        det_speech = f"Informe de {det}: contacto {c_name}, {details_str}."
+                disp = f"🎯 CONTACTO: {c_name} | {details_str}{det_suffix}"
+                speech = det_speech if det_speech else f"Contacto {c_name}, {details_str}."
             else:
-
-                disp = f"🎯 CONTACT: {det_prefix}{c_name} | {details_str}"
-
-                speech = f"{det_prefix}{c_name} contact, {details_str}." if det else f"{c_name} contact, {details_str}."
-
-
+                det_suffix = ""
+                det_speech = ""
+                if det:
+                    if det.isdigit():
+                        det_suffix = f" (Reported by unit {det})"
+                        det_speech = f"Report from unit {det}: contact {c_name}, {details_str}."
+                    else:
+                        det_suffix = f" (Reported by {det})"
+                        det_speech = f"Report from {det}: contact {c_name}, {details_str}."
+                disp = f"🎯 CONTACT: {c_name} | {details_str}{det_suffix}"
+                speech = det_speech if det_speech else f"Contact {c_name}, {details_str}."
 
             domain_key = "SURFACE" if "SKUNK" in it["id"].upper() else ("SUB" if "GOBLIN" in it["id"].upper() else "AIR")
-
             self.alert_queue.put(VoiceAlert(
 
                 priority=PRIORITY_NORMAL,
@@ -1484,75 +1574,46 @@ class CmoTacticalVoiceAdvisor:
 
 
 
+        is_target_friendly = self.is_friendly(target)
+
         # CASE 1: Friendly offensive strike (Our weapon attacking enemy)
-
-        if is_weapon_friendly or is_target_hostile:
-
+        if not is_target_friendly:
             category, _ = WeaponPhoneticHelper.get_info(weapon)
-
-            # Guns and cannon bursts: 30s cooldown per target to prevent gun spam
-
-            cooldown = 30.0 if category == "GUN" else 12.0
-
-            if (now - self.recent_threats.get(f"off_{c_tgt}", 0.0)) < cooldown:
-
+            if category == "GUN":
                 return
 
+            cooldown = 15.0 if category == "TORPEDO" else 10.0
+            if (now - self.recent_threats.get(f"off_{c_tgt}", 0.0)) < cooldown:
+                return
             self.recent_threats[f"off_{c_tgt}"] = now
 
-
-
-            if category == "GUN":
-
+            if category == "TORPEDO":
                 if self.lang == "es":
-
-                    dp = f"⚔️ [ARTILLERÍA]: Fuego naval en curso contra {c_tgt}."
-
-                    sp = f"Control de tiro: Fuego de artillería naval en curso contra {c_tgt}."
-
+                    dp = f"🌊 [ATAQUE TORPEDO]: Torpedo hacia {c_tgt}."
+                    sp = f"Torpedo hacia {c_tgt}."
                 else:
-
-                    dp = f"⚔️ [GUNFIRE]: Engaging {c_tgt} with naval gunfire."
-
-                    sp = f"Fire control: Engaging {c_tgt} with naval gunfire."
-
+                    dp = f"🌊 [TORPEDO STRIKE]: Torpedo inbound on {c_tgt}."
+                    sp = f"Torpedo inbound on {c_tgt}."
+                domain = "SUB"
             else:
-
                 if self.lang == "es":
-
-                    dp = f"🚀 [ENGAGEMENT]: Misil {c_weapon} en aproximación terminal contra {c_tgt}."
-
-                    sp = f"Control de tiro: Misil {c_weapon} en aproximación terminal hacia {c_tgt}."
-
+                    dp = f"🚀 [ENGAGEMENT]: Misil {c_weapon} hacia {c_tgt}."
+                    sp = f"Misil {c_weapon} hacia {c_tgt}."
                 else:
-
-                    dp = f"🚀 [ENGAGEMENT]: {c_weapon} in terminal intercept on {c_tgt}."
-
-                    sp = f"Fire control: {c_weapon} in terminal approach to {c_tgt}."
-
-
+                    dp = f"🚀 [ENGAGEMENT]: {c_weapon} inbound on {c_tgt}."
+                    sp = f"{c_weapon} inbound on {c_tgt}."
+                domain = "AIR"
 
             self.alert_queue.put(VoiceAlert(
-
                 priority=PRIORITY_NORMAL,
-
                 timestamp=now,
-
-                domain="AIR",
-
+                domain=domain,
                 text_display=dp,
-
                 text_speech=sp,
-
                 ttl_seconds=10.0,
-
                 is_radio=True
-
             ))
-
             return
-
-
 
         # CASE 2: Hostile weapon attacking friendly unit (True Defensive Emergency)
 
@@ -1568,13 +1629,13 @@ class CmoTacticalVoiceAdvisor:
 
             dp = f"⚠️ [AMENAZA ENTRANTE]: {c_weapon} hostil atacando a {c_tgt}."
 
-            sp = f"¡Alerta de combate! Arma hostil {c_weapon} en aproximación contra {c_tgt}. ¡Maniobra defensiva y contramedidas!"
+            sp = f"¡Alerta: {c_weapon} hostil contra {c_tgt}!"
 
         else:
 
             dp = f"⚠️ [INBOUND THREAT]: Hostile {c_weapon} attacking {c_tgt}."
 
-            sp = f"Combat alert! Hostile weapon {c_weapon} inbound against {c_tgt}. Defensive maneuvers and countermeasures!"
+            sp = f"Alert: Hostile {c_weapon} inbound on {c_tgt}!"
 
 
 
@@ -1754,7 +1815,11 @@ class CmoTacticalVoiceAdvisor:
 
     def notify_missile_endgame(self, weapon_raw: str, reason: str, target_raw: str = ""):
 
-        category, family = WeaponPhoneticHelper.get_info(weapon_raw)
+        category, family = WeaponPhoneticHelper.get_info(weapon_raw, self.lang)
+
+        # Silenciar proyectiles de canon, metralla o bombas tontas (solo avisar en misiles guiados y torpedos)
+        if category in ("GUN", "BOMB"):
+            return
 
         c_target = PhoneticHelper.clean_unit_callsign(target_raw) if target_raw else ""
 
@@ -1822,67 +1887,74 @@ class CmoTacticalVoiceAdvisor:
 
             reason = item["reason"]
 
+            category = item.get("category", "MISSILE")
+
             batch_key = f"{family}_{reason}"
 
             self.recent_endgame_spoken[batch_key] = now
 
-
+            domain = "SUB" if category == "TORPEDO" else "AIR"
 
             if self.lang == "es":
-
-                salvo_txt = f"Salva de {count} misiles {family}" if count > 1 else f"Misil {family}"
-
-                if reason == "BLIND":
-
-                    dp = f"⚠️ [GUIADO PERDIDO]: {salvo_txt} perdido por falta de radar."
-
-                    sp = f"Telemetría de guiado: {salvo_txt} perdido por pérdida de radar."
-
-                elif reason == "OUT_OF_ENERGY":
-
-                    dp = f"⚠️ [ENERGÍA AGOTADA]: {salvo_txt} agotó energía cinética."
-
-                    sp = f"Telemetría: {salvo_txt} agotó energía cinética fuera de envolvente."
-
-                elif reason == "MALFUNCTION":
-
-                    dp = f"⚠️ [FALLO EN VUELO]: {salvo_txt} avería técnica."
-
-                    sp = f"Telemetría: {salvo_txt} sufrió fallo técnico en vuelo."
-
+                if category == "TORPEDO":
+                    salvo_txt = f"Salva de {count} torpedos {family}" if count > 1 else f"Torpedo {family}"
+                    if reason == "MALFUNCTION":
+                        dp = f"⚠️ [FALLO EN AGUA]: {salvo_txt} avería técnica."
+                        sp = f"Telemetría acústica: {salvo_txt} sufrió fallo técnico en agua."
+                    elif reason == "OUT_OF_ENERGY":
+                        dp = f"⚠️ [PROPULSIÓN AGOTADA]: {salvo_txt} agotó propulsión."
+                        sp = f"Telemetría acústica: {salvo_txt} agotó batería o propulsión."
+                    else:
+                        dp = f"⚠️ [TIRO FALLIDO]: {salvo_txt} trayectoria fallida."
+                        sp = f"Telemetría acústica: {salvo_txt} trayectoria fallida."
+                elif category == "ROCKET":
+                    salvo_txt = f"Salva de {count} cohetes {family}" if count > 1 else f"Cohete {family}"
+                    dp = f"⚠️ [FALLO EN VUELO]: {salvo_txt} avería."
+                    sp = f"Telemetría: {salvo_txt} avería en vuelo."
                 else:
-
-                    dp = f"⚠️ [TIRO FALLIDO]: {salvo_txt} intercepción fallida."
-
-                    sp = f"Telemetría: {salvo_txt} intercepción fallida."
-
+                    salvo_txt = f"Salva de {count} misiles {family}" if count > 1 else f"Misil {family}"
+                    if reason == "BLIND":
+                        dp = f"⚠️ [GUIADO PERDIDO]: {salvo_txt} perdido por falta de radar."
+                        sp = f"Telemetría de guiado: {salvo_txt} perdido por pérdida de radar."
+                    elif reason == "OUT_OF_ENERGY":
+                        dp = f"⚠️ [ENERGÍA AGOTADA]: {salvo_txt} agotó energía cinética."
+                        sp = f"Telemetría: {salvo_txt} agotó energía cinética fuera de envolvente."
+                    elif reason == "MALFUNCTION":
+                        dp = f"⚠️ [FALLO EN VUELO]: {salvo_txt} avería técnica."
+                        sp = f"Telemetría: {salvo_txt} sufrió fallo técnico en vuelo."
+                    else:
+                        dp = f"⚠️ [TIRO FALLIDO]: {salvo_txt} intercepción fallida."
+                        sp = f"Telemetría: {salvo_txt} intercepción fallida."
             else:
-
-                salvo_txt = f"Salvo of {count} {family} missiles" if count > 1 else f"{family} missile"
-
-                if reason == "BLIND":
-
-                    dp = f"⚠️ [GUIDANCE LOST]: {salvo_txt} lost radar guidance."
-
-                    sp = f"Guidance telemetry: {salvo_txt} lost due to lack of radar guidance."
-
-                elif reason == "OUT_OF_ENERGY":
-
-                    dp = f"⚠️ [OUT OF ENERGY]: {salvo_txt} depleted kinetic energy."
-
-                    sp = f"Telemetry: {salvo_txt} ran out of kinetic energy."
-
-                elif reason == "MALFUNCTION":
-
-                    dp = f"⚠️ [MALFUNCTION]: {salvo_txt} technical failure."
-
-                    sp = f"Telemetry: {salvo_txt} suffered in-flight technical malfunction."
-
+                if category == "TORPEDO":
+                    salvo_txt = f"Salvo of {count} {family} torpedoes" if count > 1 else f"{family} torpedo"
+                    if reason == "MALFUNCTION":
+                        dp = f"⚠️ [TORPEDO MALFUNCTION]: {salvo_txt} technical failure."
+                        sp = f"Acoustic telemetry: {salvo_txt} suffered malfunction."
+                    elif reason == "OUT_OF_ENERGY":
+                        dp = f"⚠️ [PROPULSION DEPLETED]: {salvo_txt} depleted battery."
+                        sp = f"Acoustic telemetry: {salvo_txt} ran out of propulsion."
+                    else:
+                        dp = f"⚠️ [MISSED]: {salvo_txt} missed target."
+                        sp = f"Acoustic telemetry: {salvo_txt} failed to acquire."
+                elif category == "ROCKET":
+                    salvo_txt = f"Salvo of {count} {family} rockets" if count > 1 else f"{family} rocket"
+                    dp = f"⚠️ [MALFUNCTION]: {salvo_txt} malfunction."
+                    sp = f"Telemetry: {salvo_txt} in-flight failure."
                 else:
-
-                    dp = f"⚠️ [MISSED]: {salvo_txt} intercept missed."
-
-                    sp = f"Telemetry: {salvo_txt} failed to intercept."
+                    salvo_txt = f"Salvo of {count} {family} missiles" if count > 1 else f"{family} missile"
+                    if reason == "BLIND":
+                        dp = f"⚠️ [GUIDANCE LOST]: {salvo_txt} lost radar guidance."
+                        sp = f"Guidance telemetry: {salvo_txt} lost due to lack of radar guidance."
+                    elif reason == "OUT_OF_ENERGY":
+                        dp = f"⚠️ [OUT OF ENERGY]: {salvo_txt} depleted kinetic energy."
+                        sp = f"Telemetry: {salvo_txt} ran out of kinetic energy."
+                    elif reason == "MALFUNCTION":
+                        dp = f"⚠️ [MALFUNCTION]: {salvo_txt} technical failure."
+                        sp = f"Telemetry: {salvo_txt} suffered in-flight technical malfunction."
+                    else:
+                        dp = f"⚠️ [MISSED]: {salvo_txt} intercept missed."
+                        sp = f"Telemetry: {salvo_txt} failed to intercept."
 
 
 
@@ -1892,7 +1964,7 @@ class CmoTacticalVoiceAdvisor:
 
                 timestamp=now,
 
-                domain="AIR",
+                domain=domain,
 
                 text_display=dp,
 
@@ -2009,10 +2081,16 @@ class CmoTacticalVoiceAdvisor:
             }
 
             icon = domain_icons.get(alert.domain, "🔊")
+            if self.lang == "en":
+                prefix = "[CRITICAL]" if alert.priority == PRIORITY_CRITICAL else "[TACTICAL]"
+            else:
+                prefix = "[CRÍTICO]" if alert.priority == PRIORITY_CRITICAL else "[TÁCTICO]"
 
-            prefix = "[CRÍTICO]" if alert.priority == PRIORITY_CRITICAL else "[TÁCTICO]"
-
-            print(f"\n{icon} {prefix} {alert.text_display}")
+            clean_disp = alert.text_display.strip()
+            # Eliminar emojis o prefijos tácticos/críticos redundantes al inicio del texto
+            clean_disp = re.sub(r'^(?:[✈️🚢🌊📡🚨🎯🔊⚠️🔥🚀🛫]\s*)+', '', clean_disp)
+            clean_disp = re.sub(r'^(?:\[(?:CRÍTICO|TÁCTICO|CRITICAL|TACTICAL)\]\s*)+', '', clean_disp)
+            print(f"\n{icon} {prefix} {clean_disp}")
 
 
 
@@ -2529,11 +2607,8 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_torpedo = re.compile(r"Torpedo\s*(?:inbound|detected).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
 
     re_new_contact = re.compile(
-
-        r"New contact!\s*Designated\s*([^-\n]+?)(?:\s*-\s*Detected by\s*(.+?))?(?:\s+at\s+(\d+)deg)?(?:\s*-\s*(?:Estimated\s*)?([\d,\.]+\s*nm))?\s*$",
-
+        r"New contact!\s*Designated\s*([^-\n]+?)(?:\s*-\s*Detected by\s*(.+?))?(?:\s+at\s+(\d+)deg)?(?:\s*-\s*(Estimated\s+)?([\d,\.]+\s*nm))?(?:\s*-\s*[^\n\r]+)?\s*$",
         re.IGNORECASE
-
     )
 
     re_incoming_attack = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+is attacking\s+(.+?)(?:\s+with|\s*\.\s*|\s*,\s*|$)", re.IGNORECASE)
@@ -2552,7 +2627,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
     re_classified = re.compile(
 
-        r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*(.+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?(?:\s*\(Classification by:.*?\))?$",
+        r"Contact:\s*([^:\n]+?)\s*has been (?:positively identified|classified|type-classified) as:\s*(.+?)(?:\s*-\s*Determined as:\s*([A-Za-z]+))?(?:\s*\((?:ID|Classification)\s+by:.*?\))?\s*$",
 
         re.IGNORECASE
 
@@ -2569,11 +2644,18 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
     re_rtb = re.compile(r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?\([^)]+\))\s+is returning to base\s*\(([^)]+)\)", re.IGNORECASE)
 
     re_bda_report = re.compile(
-
-        r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+reports BDA status change on contact:\s*(.*?)\s+-\s+((?:Light|Medium|Moderate|Heavy|Minor|Severe|No)?\s*(?:damage|fire|destroyed|sunk|undamaged).*)$",
-
+        r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+reports BDA status change on contact:\s*(.*?)\s+-\s+((?:Light|Medium|Moderate|Heavy|Minor|Severe|No|Major|Critical|Conflagration)?\s*(?:damage|fire|flooding|destroyed|sunk|undamaged|capsizing).*)$",
         re.IGNORECASE
+    )
 
+    re_capsizing_warning = re.compile(
+        r"WARNING:\s*([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+is in danger of capsizing",
+        re.IGNORECASE
+    )
+
+    re_abandon_ship = re.compile(
+        r"([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+is capsizing\s*-\s*abandoning ship",
+        re.IGNORECASE
     )
 
 
@@ -2738,10 +2820,26 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
 
+                        # Auto-registro dinámico de unidades amigas en combate
+                        if line_side and is_player_side(line_side, advisor.player_side):
+                            for p in (re_bda_report.match(line), re_departed.match(line), re_rtb.match(line)):
+                                if p:
+                                    advisor.register_friendly_unit(p.group(1).strip())
+                            m_cant = re.search(r'The Unit\s+([^:\n]+?)\s+cannot fire', line, re.I)
+                            if m_cant:
+                                advisor.register_friendly_unit(m_cant.group(1).strip())
+                            m_has = re.match(r'([^:\n]+?)\s+has suffered', line, re.I)
+                            if m_has:
+                                advisor.register_friendly_unit(m_has.group(1).strip())
+                            m_fire = re.match(r'([^:\n]+?)\s+has a (?:minor|major|severe)', line, re.I)
+                            if m_fire:
+                                advisor.register_friendly_unit(m_fire.group(1).strip())
+                            m_id = re.search(r'\(ID by:\s*([^\(\[\n]+)', line, re.I)
+                            if m_id:
+                                advisor.register_friendly_unit(m_id.group(1).strip())
+
                         # 3. Unit Destroyed / Sunk
-
                         if "damage report:" in line.lower():
-
                             continue
 
 
@@ -2752,7 +2850,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             raw_unit = m_dest.group(1).strip()
 
-                            clean_target = PhoneticHelper.clean_name(raw_unit, lang)
+                            clean_target = PhoneticHelper.clean_name(re.sub(r'^\[TARGET\[?\s*', '', raw_unit, flags=re.IGNORECASE), lang)
 
 
 
@@ -2760,7 +2858,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             c_up = clean_target.upper()
 
-                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST")):
+                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "MAGAZINE", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST", "DIRECTOR")):
 
                                 continue
 
@@ -2796,7 +2894,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                                         verb = "hundido" if is_sunk else "destruido"
 
-                                        sp = f"¡Impacto definitivo confirmado! Blanco {clean_target} {verb}."
+                                        sp = f"¡Blanco {clean_target} {verb}!"
 
                                         dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
 
@@ -2804,7 +2902,7 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                                         verb = "sunk" if is_sunk else "destroyed"
 
-                                        sp = f"Splash confirmed! Target {clean_target} {verb}."
+                                        sp = f"Target {clean_target} {verb}!"
 
                                         dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
 
@@ -2899,25 +2997,16 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
                         # E. Deteccion de Nuevo Contacto con marcacion y distancia en millas
-
                         m_new = re_new_contact.search(line)
-
                         if m_new:
-
                             c_id = m_new.group(1).strip()
-
                             det_raw = m_new.group(2).strip() if m_new.group(2) else ""
-
                             b_deg = float(m_new.group(3)) if m_new.group(3) else None
-
-                            d_raw = m_new.group(4).strip() if m_new.group(4) else None
-
+                            is_est = bool(m_new.group(4))
+                            d_raw = m_new.group(5).strip() if m_new.group(5) else None
                             c_up = c_id.upper()
-
                             domain = "SURFACE" if "SKUNK" in c_up else ("SUB" if "GOBLIN" in c_up else "AIR")
-
-                            advisor.notify_contact(contact_id=c_id, domain=domain, name=c_id, bearing=b_deg, distance=d_raw, detector=det_raw)
-
+                            advisor.notify_contact(contact_id=c_id, domain=domain, name=c_id, bearing=b_deg, distance=d_raw, detector=det_raw, is_estimated=is_est)
                             continue
 
 
@@ -3116,6 +3205,15 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
 
+                            c_id_clean = PhoneticHelper.clean_name(c_id, lang)
+
+                            # Evitar auto-identificaciones absurdas (ej. un buque identificado como si mismo)
+                            if c_id.upper() == raw_type.upper() or c_id_clean.upper() == c_type.upper():
+
+                                continue
+
+
+
                             c_key = f"{c_id}:{c_type}"
 
                             if c_key in advisor.known_contacts:
@@ -3188,15 +3286,38 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                             if lang == "es":
 
-                                sp = f"Contacto {c_id} identificado positivamente como {c_type}."
+                                host_map_es = {
+                                    "FRIENDLY": "Amigo",
+                                    "HOSTILE": "Hostil",
+                                    "NEUTRAL": "Neutral",
+                                    "UNFRIENDLY": "No amigo",
+                                    "UNKNOWN": "Desconocido"
+                                }
+                                c_host_str = host_map_es.get(c_host.upper(), c_host)
 
-                                dp = f"CONTACTO IDENTIFICADO: {c_id} -> {c_type} ({c_host})."
+                                if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
+                                    sp = f"¡Alerta! Contacto {c_id_clean} identificado como hostil {c_type}."
+                                elif c_host.upper() == "FRIENDLY":
+                                    sp = f"Contacto {c_id_clean} identificado positivamente como aliado {c_type}."
+                                elif c_host.upper() == "NEUTRAL":
+                                    sp = f"Contacto {c_id_clean} identificado como tráfico neutral {c_type}."
+                                else:
+                                    sp = f"Contacto {c_id_clean} identificado positivamente como {c_type}."
+
+                                dp = f"CONTACTO IDENTIFICADO: {c_id_clean} -> {c_type} ({c_host_str})."
 
                             else:
 
-                                sp = f"Contact {c_id} identified as {c_type}."
+                                if c_host.upper() in ("HOSTILE", "UNFRIENDLY"):
+                                    sp = f"Warning: Contact {c_id_clean} identified as hostile {c_type}."
+                                elif c_host.upper() == "FRIENDLY":
+                                    sp = f"Contact {c_id_clean} positively identified as friendly {c_type}."
+                                elif c_host.upper() == "NEUTRAL":
+                                    sp = f"Contact {c_id_clean} identified as neutral {c_type}."
+                                else:
+                                    sp = f"Contact {c_id_clean} identified as {c_type}."
 
-                                dp = f"CONTACT IDENTIFIED: {c_id} -> {c_type} ({c_host})."
+                                dp = f"CONTACT IDENTIFIED: {c_id_clean} -> {c_type} ({c_host})."
 
 
 
@@ -3350,6 +3471,45 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
 
+                                                # 8.5 Emergencias de Zozobra y Abandono de Buque
+                        m_cap = re_capsizing_warning.search(line)
+                        if m_cap:
+                            c_u = PhoneticHelper.clean_unit_callsign(m_cap.group(1).strip())
+                            if lang == "es":
+                                dp = f"🚨 [CONTROL DE AVERÍAS]: {c_u} en peligro inminente de zozobra."
+                                sp = f"Control de averías: {c_u} en peligro de zozobra y vuelco."
+                            else:
+                                dp = f"🚨 [DAMAGE CONTROL]: {c_u} in danger of capsizing."
+                                sp = f"Damage control: {c_u} in danger of capsizing."
+                            advisor.alert_queue.put(VoiceAlert(
+                                priority=PRIORITY_CRITICAL,
+                                timestamp=time.time(),
+                                domain="CRITICAL",
+                                text_display=dp,
+                                text_speech=sp,
+                                ttl_seconds=12.0
+                            ))
+                            continue
+
+                        m_abn = re_abandon_ship.search(line)
+                        if m_abn:
+                            c_u = PhoneticHelper.clean_unit_callsign(m_abn.group(1).strip())
+                            if lang == "es":
+                                dp = f"🚨 [ZOZOBRA / EVACUACIÓN]: {c_u} zozobrando, abandono de buque."
+                                sp = f"Atención: {c_u} zozobrando. La tripulación abandona el buque."
+                            else:
+                                dp = f"🚨 [CAPSIZING / EVACUATION]: {c_u} capsizing, crew abandoning ship."
+                                sp = f"Warning: {c_u} is capsizing. Crew abandoning ship."
+                            advisor.alert_queue.put(VoiceAlert(
+                                priority=PRIORITY_CRITICAL,
+                                timestamp=time.time(),
+                                domain="CRITICAL",
+                                text_display=dp,
+                                text_speech=sp,
+                                ttl_seconds=12.0
+                            ))
+                            continue
+
                         # 9. BDA Report (Battle Damage Assessment)
 
                         m_bda = re_bda_report.search(line)
@@ -3376,61 +3536,81 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
                                 desc_es = bda_desc
 
+                                # 1. Purga de prefijos de broadcast técnico
+                                desc_es = re.sub(r'^(?:HF Broadcast\s*-\s*)+', '', desc_es, flags=re.IGNORECASE)
+
+                                # 2. Daños estructurales
                                 desc_es = re.sub(r'\bLight damage\b', 'daños ligeros', desc_es, flags=re.IGNORECASE)
-
                                 desc_es = re.sub(r'\bMedium damage\b|\bModerate damage\b', 'daños moderados', desc_es, flags=re.IGNORECASE)
-
                                 desc_es = re.sub(r'\bHeavy damage\b|\bHeavily damaged\b', 'daños graves', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bNo damage\b|\bUndamaged\b', 'sin daños aparentes', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bDestroyed\b', 'destruido', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bSunk\b', 'hundido', desc_es, flags=re.IGNORECASE)
 
+                                # 3. Incendios (Fires)
+                                desc_es = re.sub(r'\bConflagration\b', 'envuelto en llamas', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bCritical Fire\b', 'con incendio crítico', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bSevere Fire\b', 'con incendio severo', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMajor fire\b', 'con incendios graves', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bModerate fire\b|\bMedium fire\b', 'con fuego moderado', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMinor fire\b', 'con fuego leve', desc_es, flags=re.IGNORECASE)
                                 desc_es = re.sub(r'\bNo Fire\b', 'sin fuego', desc_es, flags=re.IGNORECASE)
 
-                                desc_es = re.sub(r'\bMinor fire\b', 'con fuego leve', desc_es, flags=re.IGNORECASE)
+                                # 4. Vías de agua e inundaciones (Flooding)
+                                desc_es = re.sub(r'\bCritical Flooding\b', 'inundación crítica', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMajor Flooding\b', 'inundación grave', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bSevere Flooding\b', 'inundación severa', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bModerate Flooding\b', 'vía de agua moderada', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bMinor Flooding\b', 'vía de agua leve', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bNo Flooding\b', 'sin vías de agua', desc_es, flags=re.IGNORECASE)
 
-                                desc_es = re.sub(r'\bMajor fire\b', 'con incendios graves', desc_es, flags=re.IGNORECASE)
+                                # 5. Estabilidad, flotabilidad y zozobra (Capsizing & Stability)
+                                desc_es = re.sub(r'\bCapsizing imminent\b', 'zozobra inminente', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bCapsizing\b', 'zozobrando', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bin danger of capsizing\b', 'peligro de zozobra', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\babandoning ship\b', 'abandonando buque', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bListing heavily\b', 'fuerte escora', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bListing\b', 'escorado', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bDead in the water\b|\bDIW\b', 'sin propulsión', desc_es, flags=re.IGNORECASE)
+                                desc_es = re.sub(r'\bSinking\b', 'hundiéndose', desc_es, flags=re.IGNORECASE)
 
-                                desc_es = re.sub(r'\bDestroyed\b', 'destruido', desc_es, flags=re.IGNORECASE)
-
-
+                                # Formato fluido para voz: cambiar guiones por comas y limpiar comas dobles
+                                desc_es = re.sub(r'\s*-\s*', ', ', desc_es)
+                                desc_es = re.sub(r',\s*,+', ',', desc_es)
+                                desc_es = re.sub(r'\s+', ' ', desc_es).strip(' ,')
 
                                 # Deduplicación de BDA para evitar múltiples avisos idénticos por salva
-
                                 now_bda = time.time()
-
                                 bda_key = f"{c_id}_{desc_es}"
-
                                 if (now_bda - advisor.recent_bda.get(bda_key, 0.0)) < 15.0:
-
                                     continue
-
                                 advisor.recent_bda[bda_key] = now_bda
 
-
-
                                 if is_sub:
-
-                                    sp = f"Informe de submarino {observer}: BDA en contacto {c_id}, {desc_es}."
-
-                                    dp = f"ASW / BDA SUBMARINA: {observer} sobre {c_id} -> {desc_es}."
-
+                                    sp = f"Evaluación acústica de daños en {c_id}: {desc_es}."
+                                    dp = f"[ASW/SUB]: {c_id} -> {desc_es}."
                                 else:
-
-                                    sp = f"Evaluación de ataque de {observer}: Blanco {c_id}, {desc_es}."
-
-                                    dp = f"INFORME BDA: {observer} sobre {c_id} -> {desc_es}."
-
+                                    sp = f"Informe BDA: {c_id}, {desc_es}."
+                                    dp = f"INFORME BDA: {c_id} -> {desc_es}."
                             else:
+                                bda_en = bda_desc
+                                bda_en = re.sub(r'^(?:HF Broadcast\s*-\s*)+', '', bda_en, flags=re.IGNORECASE)
+                                bda_en = re.sub(r'\s*-\s*', ', ', bda_en)
+                                bda_en = re.sub(r',\s*,+', ',', bda_en)
+                                bda_en = re.sub(r'\s+', ' ', bda_en).strip(' ,')
+
+                                now_bda = time.time()
+                                bda_key = f"{c_id}_{bda_en}"
+                                if (now_bda - advisor.recent_bda.get(bda_key, 0.0)) < 15.0:
+                                    continue
+                                advisor.recent_bda[bda_key] = now_bda
 
                                 if is_sub:
-
-                                    sp = f"Submarine report from {observer}: BDA on contact {c_id}, {bda_desc}."
-
-                                    dp = f"ASW / SUB BDA: {observer} on {c_id} -> {bda_desc}."
-
+                                    sp = f"Acoustic damage assessment on {c_id}: {bda_en}."
+                                    dp = f"[ASW/SUB]: {c_id} -> {bda_en}."
                                 else:
-
-                                    sp = f"Strike evaluation from {observer}: Target {c_id}, {bda_desc}."
-
-                                    dp = f"BDA REPORT: {observer} on {c_id} -> {bda_desc}."
+                                    sp = f"BDA report: {c_id}, {bda_en}."
+                                    dp = f"BDA REPORT: {c_id} -> {bda_en}." 
 
 
 

@@ -1,16 +1,39 @@
 # CHANGELOG - CMO TACTICAL VOICE ADVISOR
 
-
-
 All notable changes to the CMO Tactical Voice Advisor project are documented here.
-
 The format is based on Keep a Changelog, and this project adheres to Semantic Versioning.
-
-
 
 ---
 
+## [1.2.16] - 2026-11-02
 
+### ⚡ Doctrina de Brevedad Militar, Incertidumbre de Sensores y Anti-Saturación / Brevity & Tactical Overhaul
+- **Doctrina Brevity y Eliminación de Relleno Teatral:**
+  - Reducción de más del 65% en la duración del audio por mensaje eliminando frases dramáticas innecesarias (*"¡Maniobra defensiva y contramedidas!"*, *"¡Alerta táctica! Arma hostil..."*).
+  - Respuestas concisas de 3 a 5 palabras diseñadas para comunicaciones militares realistas de combate sin retardo en cola de audio.
+- **Tratamiento de Incertidumbre de Contactos (Radar Activo vs. ESM Pasivo):**
+  - **Contacto Fijo (Radar Activo / Sónar Activo)**: Anuncio con distancia exacta confirmada (`al 079, a 54 millas` / `bearing 079, at 54 miles`).
+  - **Contacto Incierto (ESM Pasivo / RWR / ELINT / Línea de Posición LOP)**: Se canta explícitamente el techo de horizonte radar (`al 085, máximo estimado 166 millas` / `bearing 085, estimated up to 166 miles`), evitando falsas asunciones de proximidad táctica.
+- **Motor Anti-Saturación de Contactos Navales y Submarinos:**
+  - Consolidación automática de detecciones múltiples: si se detectan 3 o más buques simultáneos (SKUNK), se emite un único reporte consolidado de grupo (*"Puente de mando. Detección múltiple: fuerza de 4 contactos de superficie al 085"* / *"Bridge. Multiple detections: group of 4 surface contacts bearing 085"*).
+  - Consolidación de contactos submarinos si se detectan 2 o más GOBLIN simultáneos.
+- **Físicas Navales, Estabilidad y Zozobra (*Capsizing*):**
+  - Incorporada traducción e identificación de físicas de hundimiento asimétrico y vuelco emitidas por CMO: `Capsizing imminent` -> *"zozobra inminente"*, `Capsizing` -> *"zozobrando"*, `in danger of capsizing` -> *"peligro de zozobra"*, `abandoning ship` -> *"abandonando buque"*, `Listing heavily` -> *"fuerte escora"*, `Dead in the water` -> *"sin propulsión"*, `Sinking` -> *"hundiéndose"*.
+  - Añadidas alertas críticas para advertencias de zozobra inminente y abandono de buque.
+- **Discriminación Ofensiva vs. Defensiva de Armas:**
+  - Auto-registro dinámico de unidades aliadas (`friendly_units`): los torpedos y misiles ofensivos propios lanzados contra el enemigo ya no disparan alarmas de evasión ni alertas críticas hacia el jugador.
+  - La alarma de amenaza entrante (`AMENAZA ENTRANTE`) se activa exclusivamente cuando el proyectil enemigo ataca a una unidad aliada propia.
+- **Corrección de Prefijos Duplicados y Limpieza Fonética:**
+  - Eliminado el error de doble prefijo en pantalla (`🎯 [TÁCTICO] 🎯 [TÁCTICO] INFORME BDA:`).
+  - Saneadas las cadenas técnicas de telemetría `[Sensors: ...]` para que el informante se anuncie limpio (ej. *CP-107 Argus Mk1*).
+  - Eliminación de corchetes rotos y prefijos huérfanos (`[TARGET[...`, `] Paul Domer Bridge`).
+- **Filtrado de Salvas Balísticas y Averías Internas:**
+  - Silenciadas ráfagas de ametralladora, cañón, averías balísticas y daños menores a afustes navales (`Quint TT`, `50 Triple`) para evitar saturación de bajas terrestres erróneas (`GROUND KILL`).
+  - Asignación correcta del Oficial de Sónar restringida a contactos acústicos y buques/submarinos con equipos de escucha reales.
+- **Herramienta de Auditoría Masiva Offline:**
+  - Incorporado script `audit_cmo_logs.py` y lanzador `AUDITAR_LOGS.bat` para validar masivamente escenarios reales sin conexión ni gasto de tokens.
+
+---
 
 ## [1.2.14] - 2026-10-28
 
