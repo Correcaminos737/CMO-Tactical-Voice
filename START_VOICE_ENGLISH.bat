@@ -6,7 +6,7 @@ chcp 65001 > nul
 
 
 
-title CMO Tactical Voice Advisor v1.2.16 (English)
+title CMO Tactical Voice Advisor v1.2.17 (English)
 
 
 
@@ -22,7 +22,7 @@ echo ======================================================================
 
 
 
-echo    CMO TACTICAL VOICE ADVISOR - v1.2.16 [Community Edition]
+echo    CMO TACTICAL VOICE ADVISOR - v1.2.17 [Community Edition]
 
 
 

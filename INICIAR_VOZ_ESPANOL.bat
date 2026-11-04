@@ -2,7 +2,7 @@
 
 chcp 65001 > nul
 
-title CMO Tactical Voice Advisor v1.2.16 (Español)
+title CMO Tactical Voice Advisor v1.2.17 (Español)
 
 color 0B
 
@@ -10,7 +10,7 @@ color 0B
 
 echo ======================================================================
 
-echo    CMO TACTICAL VOICE ADVISOR - v1.2.16 [Edición de la Comunidad]
+echo    CMO TACTICAL VOICE ADVISOR - v1.2.17 [Edición de la Comunidad]
 
 echo    Autor: Correcaminos / CMO War Room Community
 

@@ -71,7 +71,7 @@ def main():
     print(f"📊 Archivos de escenario encontrados para auditar: {len(scenario_files)}")
     print("-" * 72)
 
-    # Regex definitions conformes con v1.2.16
+    # Regex definitions conformes con v1.2.17
     re_timestamp_prefix = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
     re_line_side = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]\s*(.*)$")
 
