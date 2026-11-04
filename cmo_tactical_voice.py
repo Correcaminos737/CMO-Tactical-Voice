@@ -1717,11 +1717,14 @@ class CmoTacticalVoiceAdvisor:
 
         # Deduplicación y filtro anti-rebote (30 segundos por unidad):
 
-        if (now - self.recent_losses.get(c_unit, 0.0)) < 30.0:
-
+        c_clean = PhoneticHelper.clean_name(unit_name, self.lang)
+        u_raw_up = str(unit_name).upper().strip()
+        if (now - self.recent_losses.get(c_unit, 0.0)) < 30.0 or (now - self.recent_losses.get(c_clean, 0.0)) < 30.0 or (now - self.recent_losses.get(u_raw_up, 0.0)) < 30.0:
             return
-
         self.recent_losses[c_unit] = now
+        if c_clean:
+            self.recent_losses[c_clean] = now
+        self.recent_losses[u_raw_up] = now
 
         if self.lang == "es":
 
@@ -2938,79 +2941,64 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
 
-                            # Skip internal components (engines, mounts, antennas, radios, TTs)
-
+                            # Skip internal components (engines, mounts, antennas, radios, TTs, sensors, generators)
                             c_up = clean_target.upper()
-
-                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "MAGAZINE", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST", "DIRECTOR")):
-
+                            if any(comp in c_up for comp in ("ENGINE", "RADAR", "RADIO", "MOUNT", "MAGAZINE", "TURRET", "TT", "PERISCOPE", "EJECTOR", "SONAR", "BURST", "DIRECTOR", "SENSOR", "DIESEL", "GENERATOR", "TWIN")):
                                 continue
 
                             if clean_target and clean_target not in (")", "(", "#", "-", "/", "No cargo") and len(clean_target) > 1:
-
                                 is_sunk = "sunk" in line.lower()
+                                now_d = time.time()
+                                c_callsign = PhoneticHelper.clean_unit_callsign(raw_unit)
 
-                                # Si la unidad pertenecia al bando del jugador o aliado -> BAJA ALIADA
+                                # 1. Is this unit an allied/player aircraft, vessel, or installation?
+                                is_friendly_target = (
+                                    is_player_side(line_side, advisor.player_side)
+                                    or advisor.is_friendly(raw_unit)
+                                    or advisor.is_friendly(clean_target)
+                                    or advisor.is_friendly(c_callsign)
+                                    or (advisor.player_side and advisor.player_side.upper() in raw_unit.upper())
+                                )
 
-                                if is_player_side(line_side, advisor.player_side):
+                                # 2. Anti-duplication: if this unit was ALREADY reported as a friendly loss, ignore duplicate lines from other sides
+                                if (now_d - advisor.recent_losses.get(c_callsign, 0.0)) < 30.0 or (now_d - advisor.recent_losses.get(clean_target, 0.0)) < 30.0 or (now_d - advisor.recent_losses.get(raw_unit.upper(), 0.0)) < 30.0:
+                                    continue
 
+                                if is_friendly_target:
+                                    advisor.recent_losses[c_callsign] = now_d
+                                    advisor.recent_losses[clean_target] = now_d
+                                    advisor.recent_losses[raw_unit.upper()] = now_d
                                     advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
-
                                 else:
-
-                                    # Deduplicación de derribo/destrucción enemiga (20 segundos por blanco)
-
-                                    now_k = time.time()
-
-                                    if (now_k - advisor.recent_kills.get(clean_target, 0.0)) < 20.0:
-
+                                    # Never announce a friendly unit as an enemy splash/kill
+                                    if advisor.is_friendly(raw_unit) or advisor.is_friendly(clean_target) or advisor.is_friendly(c_callsign):
                                         continue
 
-                                    advisor.recent_kills[clean_target] = now_k
-
-
+                                    # Deduplicación de derribo/destrucción enemiga (20 segundos por blanco)
+                                    if (now_d - advisor.recent_kills.get(clean_target, 0.0)) < 20.0:
+                                        continue
+                                    advisor.recent_kills[clean_target] = now_d
 
                                     # Unidad hostil destruida -> KILL CONFIRMADO
-
                                     domain = "SUB" if is_sunk else "BDA"
-
                                     if lang == "es":
-
                                         verb = "hundido" if is_sunk else "destruido"
-
                                         sp = f"¡Blanco {clean_target} {verb}!"
-
                                         dp = f"KILL / SPLASH CONFIRMADO: {clean_target} {verb}."
-
                                     else:
-
                                         verb = "sunk" if is_sunk else "destroyed"
-
                                         sp = f"Target {clean_target} {verb}!"
-
                                         dp = f"KILL / SPLASH CONFIRMED: {clean_target} {verb}."
 
-
-
                                     advisor.alert_queue.put(VoiceAlert(
-
                                         priority=PRIORITY_HIGH,
-
                                         timestamp=time.time(),
-
                                         domain=domain,
-
                                         text_display=dp,
-
                                         text_speech=sp,
-
                                         ttl_seconds=15.0
-
                                     ))
-
                             continue
-
-
 
                         # Filtro estricto de Niebla de Guerra (Fog of War):
 
