@@ -1717,13 +1717,11 @@ class CmoTacticalVoiceAdvisor:
 
         # Deduplicación y filtro anti-rebote (30 segundos por unidad):
 
-        c_clean = PhoneticHelper.clean_name(unit_name, self.lang)
         u_raw_up = str(unit_name).upper().strip()
-        if (now - self.recent_losses.get(c_unit, 0.0)) < 30.0 or (now - self.recent_losses.get(c_clean, 0.0)) < 30.0 or (now - self.recent_losses.get(u_raw_up, 0.0)) < 30.0:
+        # Deduplicar solo por unidad específica (callsign / número), no por modelo genérico:
+        if (now - self.recent_losses.get(c_unit, 0.0)) < 30.0 or (now - self.recent_losses.get(u_raw_up, 0.0)) < 30.0:
             return
         self.recent_losses[c_unit] = now
-        if c_clean:
-            self.recent_losses[c_clean] = now
         self.recent_losses[u_raw_up] = now
 
         if self.lang == "es":
@@ -2960,14 +2958,14 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                     or (advisor.player_side and advisor.player_side.upper() in raw_unit.upper())
                                 )
 
-                                # 2. Anti-duplication: if this unit was ALREADY reported as a friendly loss, ignore duplicate lines from other sides
-                                if (now_d - advisor.recent_losses.get(c_callsign, 0.0)) < 30.0 or (now_d - advisor.recent_losses.get(clean_target, 0.0)) < 30.0 or (now_d - advisor.recent_losses.get(raw_unit.upper(), 0.0)) < 30.0:
+                                # 2. Anti-duplicación específica: ignorar líneas duplicadas de la misma aeronave reportadas por otros bandos (ej. barcos pesqueros)
+                                u_raw_up = str(raw_unit).upper().strip()
+                                if (now_d - advisor.recent_losses.get(c_callsign, 0.0)) < 30.0 or (now_d - advisor.recent_losses.get(u_raw_up, 0.0)) < 30.0:
                                     continue
 
                                 if is_friendly_target:
                                     advisor.recent_losses[c_callsign] = now_d
-                                    advisor.recent_losses[clean_target] = now_d
-                                    advisor.recent_losses[raw_unit.upper()] = now_d
+                                    advisor.recent_losses[u_raw_up] = now_d
                                     advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
                                 else:
                                     # Never announce a friendly unit as an enemy splash/kill
