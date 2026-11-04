@@ -7,15 +7,11 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [1.2.17] - 2026-11-04
 
-### 🎯 Selección Obligatoria de Bando y Aislamiento de Niebla de Guerra / Mandatory Side Selection & Strict Fog of War
-- **Selección Obligatoria de Bando en Quick Play y Partidas Guardadas:**
-  - Corregido el problema donde partidas generadas al vuelo (Quick Play / Strike Generator) o partidas guardadas (.save) no generaban la línea de evento Switched side to: <Bando>.
-  - Ahora el sistema escanea en tiempo real los bandos activos en el teatro de operaciones y exige al usuario seleccionar su bando de combate (1-N o nombre), evitando confusiones operativas.
-- **Aislamiento Estricto de Niebla de Guerra (Fog of War):**
-  - Eliminado el fallback permisivo que procesaba telemetría de bandos desconocidos como propios.
-  - Bloqueadas las fugas de sensores de aeronaves enemigas: el jugador nunca más escuchará detecciones de radares hostiles ni sus propios aviones catalogados erróneamente como hostiles por la IA oponente.
-- **Discriminación 100% Certera de Bajas Aliadas vs. Derribos Hostiles:**
-  - Garantizado el enrutamiento perfecto: los aviones o buques enemigos destruidos siempre disparan KILL / SPLASH CONFIRMADO, mientras que las pérdidas propias disparan la alarma crítica BAJA ALIADA.
+### 🎯 Selección de Bando en Partidas Guardadas / Side Selection & Fog of War Fix
+- **Selección de Bando si no hay evento de inicio:**
+  - En partidas guardadas (.save) o escenarios que no generan la línea 'Switched side to:', el asesor solicita seleccionar el bando activo del jugador para evitar mezclar facciones.
+- **Aislamiento de Niebla de Guerra (Fog of War):**
+  - Bloqueadas las fugas de sensores de bandos rivales, evitando escuchar radares enemigos.
 
 ---
 
