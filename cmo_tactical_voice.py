@@ -2964,8 +2964,6 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                                     continue
 
                                 if is_friendly_target:
-                                    advisor.recent_losses[c_callsign] = now_d
-                                    advisor.recent_losses[u_raw_up] = now_d
                                     advisor.notify_friendly_loss(unit_name=raw_unit, reason=line)
                                 else:
                                     # Never announce a friendly unit as an enemy splash/kill
