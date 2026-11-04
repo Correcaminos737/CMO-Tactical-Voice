@@ -6,7 +6,7 @@
 
 CMO Tactical Voice Advisor - Community Edition
 
-Version: 1.2.16
+Version: 1.2.17
 
 Author: Correcaminos & CMO War Room Community
 
@@ -70,7 +70,7 @@ from voice_downloader import ensure_voices_available
 
 
 
-__version__ = "1.2.16"
+__version__ = "1.2.17"
 
 
 
@@ -2287,6 +2287,98 @@ def detect_player_side(log_path: str) -> Optional[str]:
     return last_side
 
 
+def scan_scenario_sides(log_path: Optional[str]) -> List[str]:
+    """Scans the active CMO log to discover all active sides present in square brackets."""
+    if not log_path or not os.path.exists(log_path):
+        return []
+    sides = []
+    seen = set()
+    re_bracket_side = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]")
+    ignore_sides = {"MAP MARKERS", "GLOBAL", "MARKERS", "NEUTRALS", "CIVILIAN", "CIVILIANS"}
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                m = re_bracket_side.match(line.strip())
+                if m:
+                    s_name = m.group(1).strip()
+                    if s_name and s_name.upper() not in ignore_sides and s_name not in seen:
+                        seen.add(s_name)
+                        sides.append(s_name)
+    except Exception:
+        pass
+    return sides
+
+
+def prompt_mandatory_player_side(log_path: Optional[str] = None, lang: str = "es") -> str:
+    """Prompt the user interactively to select their operational side when Switched side to: is missing.
+    Mandatory side selection ensures Fog of War and friend/foe discrimination remain 100% accurate."""
+    candidate_sides = []
+    if log_path and os.path.exists(log_path):
+        candidate_sides = scan_scenario_sides(log_path)
+        if not candidate_sides:
+            for _ in range(4):
+                time.sleep(0.5)
+                candidate_sides = scan_scenario_sides(log_path)
+                if candidate_sides:
+                    break
+
+    while True:
+        if candidate_sides:
+            if lang == "es":
+                print("\n⚠️  No se detectó cambio de bando automático (Quick Play / Partida guardada).")
+                print("   Es OBLIGATORIO indicar tu bando para aplicar Niebla de Guerra y distinguir amigos de enemigos:")
+                print("   Bandos detectados en el teatro de operaciones:")
+                for idx, s in enumerate(candidate_sides, 1):
+                    print(f"     [{idx}] {s}")
+                prompt_str = f"   Introduce el número (1-{len(candidate_sides)}) o el nombre de tu bando: "
+            else:
+                print("\n⚠️  No automatic side switch detected (Quick Play / Saved game).")
+                print("   Selecting your operational side is MANDATORY to enforce Fog of War and friend/foe recognition:")
+                print("   Sides detected in theater:")
+                for idx, s in enumerate(candidate_sides, 1):
+                    print(f"     [{idx}] {s}")
+                prompt_str = f"   Enter number (1-{len(candidate_sides)}) or side name: "
+        else:
+            if lang == "es":
+                print("\n⚠️  No se detectó el bando de operaciones en el log.")
+                print("   Es OBLIGATORIO indicar tu bando (ej: NATO, USN, Russia, España) para iniciar:")
+                prompt_str = "   Introduce tu bando de operaciones: "
+            else:
+                print("\n⚠️  Operational side was not detected in the log.")
+                print("   Selecting your side (e.g. NATO, USN, Russia) is MANDATORY to proceed:")
+                prompt_str = "   Enter your operational side: "
+
+        try:
+            choice = input(prompt_str).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nOperación cancelada por el usuario.")
+            sys.exit(0)
+
+        if not choice:
+            err_msg = "❌ Selección obligatoria. Por favor, introduce un bando." if lang == "es" else "❌ Mandatory selection. Please enter a side."
+            print(err_msg)
+            continue
+
+        if candidate_sides and choice.isdigit():
+            idx = int(choice)
+            if 1 <= idx <= len(candidate_sides):
+                return candidate_sides[idx - 1]
+
+        matched = None
+        for cs in candidate_sides:
+            if choice.upper() == cs.upper():
+                matched = cs
+                break
+        if matched:
+            return matched
+
+        if len(choice) >= 2:
+            return choice
+
+        err_msg = "❌ Selección no válida. Por favor, reintenta." if lang == "es" else "❌ Invalid selection. Please retry."
+        print(err_msg)
+
+
 
 
 
@@ -2312,7 +2404,7 @@ def is_player_side(line_side: Optional[str], player_side: Optional[str]) -> bool
 
     if not line_side or not player_side:
 
-        return True
+        return False
 
     ls = line_side.strip().upper()
 
@@ -2571,18 +2663,16 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
     if side_override:
-
         advisor.player_side = side_override.strip()
-
         print(f"🎖️ Bando forzado: {advisor.player_side}")
-
-    elif active_log:
-
-        advisor.player_side = detect_player_side(active_log)
-
+    else:
+        if active_log:
+            advisor.player_side = detect_player_side(active_log)
         if advisor.player_side:
-
             print(f"🎖️ Bando detectado: {advisor.player_side}")
+        else:
+            advisor.player_side = prompt_mandatory_player_side(active_log, lang=lang)
+            print(f"🎖️ Bando configurado: {advisor.player_side}")
 
 
 
@@ -2673,8 +2763,10 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                 file_pos = 0
 
                 if not side_override:
-
                     advisor.player_side = detect_player_side(current_log)
+                    if not advisor.player_side:
+                        advisor.player_side = prompt_mandatory_player_side(current_log, lang=lang)
+                        print(f"🎖️ Bando configurado: {advisor.player_side}")
 
                 advisor.is_baseline_sync = True
 
