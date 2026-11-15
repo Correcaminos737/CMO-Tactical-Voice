@@ -2426,7 +2426,7 @@ def resolve_player_side(log_path: Optional[str] = None, lang: str = "es") -> str
             try:
                 choice = input(prompt_str).strip()
             except (EOFError, KeyboardInterrupt):
-                print("\nOperación cancelada.")
+                print("\nOperación cancelada." if lang == "es" else "\nOperation canceled.")
                 sys.exit(0)
 
             if not choice and default_idx:
