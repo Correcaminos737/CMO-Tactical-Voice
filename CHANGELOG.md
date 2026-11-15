@@ -5,6 +5,19 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ---
 
+## [1.2.18] - 2026-11-15
+
+### 🌐 Universal Windows Date Format & Strict Fog of War Isolation / Formato Universal de Fecha
+- **Soporte Universal de Formato Regional de Fecha en Windows (US/UK/Internacional):**
+  - Corregido el fallo en el filtro de Niebla de Guerra (`re_line_side`) en sistemas con Windows en inglés / regional EE.UU. (`M/d/yyyy` o formato con `AM/PM`, ej. `11/15/2026 2:15:30 PM`), donde el patrón anterior exigía dos dígitos fijos (`dd/MM/yyyy`). Al fallar el parseo en Windows internacional, la facción de la línea quedaba vacía (`None`) y los reportes de bandos rivales (ej. Rusia) se anunciaban al jugador (ej. Francia).
+  - El nuevo parser universal extrae la facción independientemente del formato de fecha, hora o región de Windows.
+- **Bloqueo Estricto de Bando ante Eventos Lua / ScenEdit_SetSide:**
+  - Si el usuario fija su bando o usa `--side`, los eventos dinámicos de cambio de bando automáticos de CMO ya no sobrescriben la facción del jugador.
+- **Salida Bilingüe en Consola (EN/ES):**
+  - Los mensajes de estado del sistema y confirmación de bando en consola ahora se muestran en inglés cuando se inicia con `--lang en`.
+
+---
+
 ## [1.2.17] - 2026-11-04
 
 ### 🎯 Selección de Bando en Partidas Guardadas / Side Selection & Fog of War Fix

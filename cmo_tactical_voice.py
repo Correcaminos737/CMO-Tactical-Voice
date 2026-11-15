@@ -6,7 +6,7 @@
 
 CMO Tactical Voice Advisor - Community Edition
 
-Version: 1.2.17
+Version: 1.2.18
 
 Author: Correcaminos & CMO War Room Community
 
@@ -70,7 +70,7 @@ from voice_downloader import ensure_voices_available
 
 
 
-__version__ = "1.2.17"
+__version__ = "1.2.18"
 
 
 
@@ -545,8 +545,7 @@ class PhoneticHelper:
 
             return ""
 
-        text = re.sub(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*", "", raw)
-
+        text = re.sub(r"^.*?\s-\s+", "", raw)
         text = re.sub(r"^\[.*?\]\s*", "", text).strip()
 
 
@@ -2294,7 +2293,7 @@ def scan_scenario_sides(log_path: Optional[str]) -> List[str]:
         return []
     sides = []
     seen = set()
-    re_bracket_side = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]")
+    re_bracket_side = re.compile(r"^(?:.*?\s-\s+)?\[([^\]\n]+)\]")
     ignore_sides = {"MAP MARKERS", "GLOBAL", "MARKERS", "NEUTRALS", "CIVILIAN", "CIVILIANS"}
     try:
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
@@ -2665,25 +2664,20 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
     if side_override:
         advisor.player_side = side_override.strip()
-        print(f"🎖️ Bando forzado: {advisor.player_side}")
+        print(f"🎖️ Bando forzado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side locked: {advisor.player_side}")
     else:
         if active_log:
             advisor.player_side = detect_player_side(active_log)
         if advisor.player_side:
-            print(f"🎖️ Bando detectado: {advisor.player_side}")
+            print(f"🎖️ Bando detectado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side detected: {advisor.player_side}")
         else:
             advisor.player_side = prompt_mandatory_player_side(active_log, lang=lang)
-            print(f"🎖️ Bando configurado: {advisor.player_side}")
-
-
+            print(f"🎖️ Bando configurado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side set: {advisor.player_side}")
 
     # Regex definitions
-
     re_side_switch = re.compile(r"Switched side to:\s*([^:\n\r]+)", re.IGNORECASE)
-
-    re_line_side = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]\s*(.*)$")
-
-    re_timestamp_prefix = re.compile(r"^\d{2}/\d{2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
+    re_line_side = re.compile(r"^(?:.*?\s-\s+)?\[([^\]\n]+)\]\s*(.*)$")
+    re_timestamp_prefix = re.compile(r"^.*?\s-\s+", re.IGNORECASE)
 
     re_vampire = re.compile(r"(?:VAMPIRE|Missile inbound).*?(?:at\s*(\d+)deg)?", re.IGNORECASE)
 
@@ -2743,31 +2737,28 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
 
 
 
-    print("\n🟢 Sistema activo. Despausa o avanza el tiempo en CMO (1x o Barra Espaciadora).")
-
-    print("Para apagar el asesor, simplemente cierra esta ventana.\n")
-
-
+    if lang == "es":
+        print("\n🟢 Sistema activo. Despausa o avanza el tiempo en CMO (1x o Barra Espaciadora).")
+        print("Para apagar el asesor, simplemente cierra esta ventana.\n")
+    else:
+        print("\n🟢 System active. Unpause or advance time in CMO (1x or Spacebar).")
+        print("To stop the advisor, simply close this window.\n")
 
     try:
-
         while True:
-
             latest = get_latest_cmo_log(log_dir)
-
             if latest and latest != current_log:
-
-                print(f"\n🔄 Detectado nuevo log / escenario: {os.path.basename(latest)}")
-
+                new_log_msg = f"\n🔄 Detectado nuevo log / escenario: {os.path.basename(latest)}" if lang == "es" else f"\n🔄 Detected new scenario / combat log: {os.path.basename(latest)}"
+                print(new_log_msg)
                 current_log = latest
-
                 file_pos = 0
 
                 if not side_override:
                     advisor.player_side = detect_player_side(current_log)
                     if not advisor.player_side:
                         advisor.player_side = prompt_mandatory_player_side(current_log, lang=lang)
-                        print(f"🎖️ Bando configurado: {advisor.player_side}")
+                    side_set_msg = f"🎖️ Bando configurado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side set: {advisor.player_side}"
+                    print(side_set_msg)
 
                 advisor.is_baseline_sync = True
 
@@ -2858,25 +2849,17 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                         # Detect side switch events
 
                         m_sw = re_side_switch.search(raw_s)
-
                         if m_sw:
-
                             cand_side = m_sw.group(1).strip()
-
                             if cand_side:
-
-                                advisor.player_side = cand_side
-
-                                advisor.known_contacts.clear()
-
-                                advisor.known_hostiles.clear()
-
-                                advisor.friendly_units.clear()
-
-                                advisor.recent_threats.clear()
-
-                                print(f"🎖️ Bando de operaciones activo: {advisor.player_side}")
-
+                                if not side_override:
+                                    advisor.player_side = cand_side
+                                    advisor.known_contacts.clear()
+                                    advisor.known_hostiles.clear()
+                                    advisor.friendly_units.clear()
+                                    advisor.recent_threats.clear()
+                                    lbl = f"🎖️ Bando de operaciones activo: {advisor.player_side}" if lang == "es" else f"🎖️ Active operational side: {advisor.player_side}"
+                                    print(lbl)
                             continue
 
 

@@ -71,9 +71,9 @@ def main():
     print(f"📊 Archivos de escenario encontrados para auditar: {len(scenario_files)}")
     print("-" * 72)
 
-    # Regex definitions conformes con v1.2.17
-    re_timestamp_prefix = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*")
-    re_line_side = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s*-\s*\[(.*?)\]\s*(.*)$")
+    # Regex definitions conformes con v1.2.18
+    re_timestamp_prefix = re.compile(r"^.*?\s-\s+", re.IGNORECASE)
+    re_line_side = re.compile(r"^(?:.*?\s-\s+)?\[([^\]\n]+)\]\s*(.*)$")
 
     re_destroyed = re.compile(r"(?:Unit:\s*)?([A-Za-z0-9\-\s,#\(\)\'\"\[\]\.]+?)\s+has (?:been destroyed|sunk|run out of fuel and crashed)", re.IGNORECASE)
     re_incoming_attack = re.compile(r"(?:Weapon:\s*)?([^:\n]+?)\s+is attacking\s+(.+?)(?:\s+with\b|\s*\.\s*$|$)", re.IGNORECASE)
