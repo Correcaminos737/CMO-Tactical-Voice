@@ -284,7 +284,7 @@ if %ERRORLEVEL% NEQ 0 (
 
 
 
-%PY_CMD% cmo_tactical_voice.py --lang en
+%PY_CMD% cmo_tactical_voice.py --lang en %*
 
 
 

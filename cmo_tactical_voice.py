@@ -2379,6 +2379,81 @@ def prompt_mandatory_player_side(log_path: Optional[str] = None, lang: str = "es
         print(err_msg)
 
 
+def resolve_player_side(log_path: Optional[str] = None, lang: str = "es") -> str:
+    """
+    Intelligently determines the operational player side.
+    - If scenario has multiple factions (e.g. saved games where both Pakistan & India exist),
+      prompts player with a 1-key confirmation (ENTER for detected side, or 1/2 to switch),
+      preventing accidental opponent faction assignment.
+    - If only 1 faction exists, locks automatically without blocking.
+    """
+    detected = detect_player_side(log_path) if log_path else None
+    candidate_sides = scan_scenario_sides(log_path) if log_path else []
+
+    # If only one candidate side exists in the scenario log, lock to it directly
+    if len(candidate_sides) == 1:
+        return candidate_sides[0]
+
+    # If multiple candidate sides exist (e.g. Pakistan vs India in saved games)
+    if candidate_sides:
+        default_idx = None
+        if detected:
+            for idx, s in enumerate(candidate_sides, 1):
+                if s.strip().upper() == detected.strip().upper():
+                    default_idx = idx
+                    break
+
+        if lang == "es":
+            print("\n🎖️ Bandos detectados en el teatro de operaciones:")
+            for idx, s in enumerate(candidate_sides, 1):
+                tag = " (Detectado)" if idx == default_idx else ""
+                print(f"     [{idx}] {s}{tag}")
+            if default_idx:
+                prompt_str = f"   Pulsa ENTER para confirmar [{candidate_sides[default_idx-1]}] o introduce tu número (1-{len(candidate_sides)}): "
+            else:
+                prompt_str = f"   Introduce el número de tu bando (1-{len(candidate_sides)}): "
+        else:
+            print("\n🎖️ Sides detected in theater:")
+            for idx, s in enumerate(candidate_sides, 1):
+                tag = " (Detected)" if idx == default_idx else ""
+                print(f"     [{idx}] {s}{tag}")
+            if default_idx:
+                prompt_str = f"   Press ENTER to confirm [{candidate_sides[default_idx-1]}] or enter your side number (1-{len(candidate_sides)}): "
+            else:
+                prompt_str = f"   Enter your side number (1-{len(candidate_sides)}): "
+
+        while True:
+            try:
+                choice = input(prompt_str).strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nOperación cancelada.")
+                sys.exit(0)
+
+            if not choice and default_idx:
+                return candidate_sides[default_idx - 1]
+            if not choice:
+                continue
+
+            if choice.isdigit():
+                idx = int(choice)
+                if 1 <= idx <= len(candidate_sides):
+                    return candidate_sides[idx - 1]
+
+            for cs in candidate_sides:
+                if choice.upper() == cs.upper():
+                    return cs
+
+            if len(choice) >= 2:
+                return choice
+
+            err = "❌ Selección no válida. Por favor, introduce un número de la lista." if lang == "es" else "❌ Invalid selection. Please enter a number from the list."
+            print(err)
+
+    if detected:
+        return detected
+    return prompt_mandatory_player_side(log_path, lang=lang)
+
+
 
 
 
@@ -2666,13 +2741,8 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
         advisor.player_side = side_override.strip()
         print(f"🎖️ Bando forzado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side locked: {advisor.player_side}")
     else:
-        if active_log:
-            advisor.player_side = detect_player_side(active_log)
-        if advisor.player_side:
-            print(f"🎖️ Bando detectado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side detected: {advisor.player_side}")
-        else:
-            advisor.player_side = prompt_mandatory_player_side(active_log, lang=lang)
-            print(f"🎖️ Bando configurado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side set: {advisor.player_side}")
+        advisor.player_side = resolve_player_side(active_log, lang=lang)
+        print(f"🎖️ Bando de operaciones activo: {advisor.player_side}" if lang == "es" else f"🎖️ Active operational side: {advisor.player_side}")
 
     # Regex definitions
     re_side_switch = re.compile(r"Switched side to:\s*([^:\n\r]+)", re.IGNORECASE)
@@ -2754,10 +2824,8 @@ def run_tactical_voice(lang: str = "es", side_override: str = ""):
                 file_pos = 0
 
                 if not side_override:
-                    advisor.player_side = detect_player_side(current_log)
-                    if not advisor.player_side:
-                        advisor.player_side = prompt_mandatory_player_side(current_log, lang=lang)
-                    side_set_msg = f"🎖️ Bando configurado: {advisor.player_side}" if lang == "es" else f"🎖️ Operational side set: {advisor.player_side}"
+                    advisor.player_side = resolve_player_side(current_log, lang=lang)
+                    side_set_msg = f"🎖️ Bando de operaciones activo: {advisor.player_side}" if lang == "es" else f"🎖️ Active operational side: {advisor.player_side}"
                     print(side_set_msg)
 
                 advisor.is_baseline_sync = True
